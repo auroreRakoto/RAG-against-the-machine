@@ -1,0 +1,8 @@
+ressources:
+- https://en.wikipedia.org/wiki/Retrieval-augmented_generation
+- https://www.ibm.com/think/topics/retrieval-augmented-generation
+- https://www.geeksforgeeks.org/nlp/what-is-retrieval-augmented-generation-rag/
+
+
+installation:
+    uv init
