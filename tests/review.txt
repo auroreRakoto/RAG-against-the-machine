@@ -1,1 +1,5 @@
 searchResults class names
+
+end_index in textChunker
+
+load text in repo loader

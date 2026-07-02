@@ -62,7 +62,7 @@ class FileReader:
         """
         path = Path(file_path)
 
-        print(f"[FileReader] Reading file: {path}")
+        # print(f"[FileReader] Reading file: {path}")
 
         with path.open(
             mode="r",
@@ -114,11 +114,49 @@ from abc import ABC, abstractmethod
 
 
 class Chunker(ABC):
-    """
-    represents a chunker that can split text into chunks.
-    """
+    def __init__(self, max_chunk_size: int = 2000) -> None:
+        self.max_chunk_size = max_chunk_size
+
+    def chunk(
+        self,
+        text: str,
+        file_path: str,
+    ) -> list[Chunk]:
+        chunks: list[Chunk] = []
+        start = 0
+
+        while start < len(text):
+            max_end = min(
+                start + self.max_chunk_size,
+                len(text),
+            )
+
+            end = self.find_split_index(
+                text=text,
+                start=start,
+                max_end=max_end,
+            )
+
+            chunks.append(
+                Chunk(
+                    text=text[start:end],
+                    file_path=file_path,
+                    first_character_index=start,
+                    last_character_index=end,
+                )
+            )
+
+            start = end
+
+        return chunks
+
     @abstractmethod
-    def chunk(self, text: str, file_path: str) -> list[Chunk]:
+    def find_split_index(
+        self,
+        text: str,
+        start: int,
+        max_end: int,
+    ) -> int:
         pass
 
 
@@ -128,13 +166,28 @@ class PythonChunker(Chunker):
     """
     pass
 
-
 class TextChunker(Chunker):
-    """
-    represents a chunker that can split Markdown or text into chunks.
-    """
-    pass
+    def find_split_index(
+        self,
+        text: str,
+        start: int,
+        max_end: int,
+    ) -> int:
+        """
+        Finds the index to split the text into chunks.
+        """
+        if max_end >= len(text):
+            return len(text)
 
+        split_index = text.rfind("\n", start, max_end)
+
+        if split_index <= start:
+            split_index = text.rfind(" ", start, max_end)
+
+        if split_index <= start:
+            return max_end
+
+        return split_index + 1
 
 class ChunkStorage:
     pass
@@ -398,6 +451,17 @@ class CLI:
         loader = RepositoryLoader(file_reader=reader)
 
         files = loader.load(repository_path)
+
+        text_chunker = TextChunker(
+            max_chunk_size=max_chunk_size
+        )
+
+        for file_path, text in files.items():
+            if file_path.endswith(".md"):
+                chunks = text_chunker.chunk(
+                    text=text,
+                    file_path=file_path,
+                )
 
         print(f"[CLI] Repository contains {len(files)} useful files")
 
