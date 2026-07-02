@@ -1,0 +1,6 @@
+2026-07-02 18:57:04,341 | INFO | [CLI] Starting repository indexing: data/raw/vllm-0.10.1
+2026-07-02 18:57:30,221 | INFO | [RepositoryLoader] Loaded 1941 files
+2026-07-02 18:57:30,222 | INFO | [CLI] Repository loading completed
+2026-07-02 18:57:35,500 | INFO | [BM25Index] Starting BM25 index construction
+2026-07-02 18:57:36,957 | INFO | [BM25Index] BM25 index construction completed
+2026-07-02 18:57:36,957 | INFO | [CLI] Created 11072 chunks

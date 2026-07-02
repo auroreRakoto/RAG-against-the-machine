@@ -1,3 +1,65 @@
+import logging
+from pathlib import Path
+
+
+def create_file_logger(
+    name: str,
+    file_path: str,
+) -> logging.Logger:
+    """
+    Creates a logger that writes messages to a specific file.
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    if logger.handlers:
+        return logger
+
+    path = Path(file_path)
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    handler = logging.FileHandler(
+        path,
+        mode="w",
+        encoding="utf-8",
+    )
+
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s"
+        )
+    )
+
+    logger.addHandler(handler)
+
+    return logger
+
+
+files_logger = create_file_logger(
+    "files",
+    "data/logs/files_read.log",
+)
+
+chunks_logger = create_file_logger(
+    "chunks",
+    "data/logs/chunks.log",
+)
+
+chunks_loaded_logger = create_file_logger(
+    "chunks_loaded",
+    "data/logs/chunks_loaded.log",
+)
+
+steps_logger = create_file_logger(
+    "steps",
+    "data/logs/steps.log",
+)
+
+
 # ////////////////////////////////////////////////////////////////// #
 # ///////////////////////////// MODELS ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
@@ -100,8 +162,14 @@ class RepositoryLoader:
                     str(file_path)
                 )
 
-        print(
-            f"[RepositoryLoader] Loaded {len(files)} files"
+                files_logger.info(
+                    "Read file: %s",
+                    file_path,
+                )
+
+        steps_logger.info(
+            "[RepositoryLoader] Loaded %d files",
+            len(files)
         )
 
         return files
@@ -136,18 +204,30 @@ class Chunker(ABC):
                 start=start,
                 max_end=max_end,
             )
-
-            chunks.append(
-                Chunk(
-                    text=text[start:end],
-                    file_path=file_path,
-                    first_character_index=start,
-                    last_character_index=end,
-                )
+            chunk = Chunk(
+                text=text[start:end],
+                file_path=file_path,
+                first_character_index=start,
+                last_character_index=end,
             )
 
-            start = end
+            chunks_logger.info(
+                "File=%s | start=%d | end=%d\n%s\n",
+                file_path,
+                start,
+                end,
+                chunk.text,
+            )
 
+            chunks.append(chunk)
+            
+
+            start = end
+        chunks_loaded_logger.info(
+            "Created %d chunks for file: %s",
+            len(chunks),
+            file_path,
+        )
         return chunks
 
     @abstractmethod
@@ -211,6 +291,7 @@ class ChunkStorage:
 # /////////////////////////// INDEXING ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 from abc import ABC, abstractmethod
+from rank_bm25 import BM25Okapi
 
 
 class SearchIndex(ABC):
@@ -246,25 +327,102 @@ class BM25Index(SearchIndex):
         """
         Tokenizes the chunks and builds the BM25 index.
         """
-        pass
+        if not chunks:
+            raise ValueError("Cannot build an index without chunks")
 
-    def search(self, query: str, k: int) -> list[Chunk]:
+        steps_logger.info(
+            "[BM25Index] Starting BM25 index construction"
+        )
+
+        self.chunks = chunks
+
+        self.tokenized_chunks = [
+            self.tokenize(chunk.text)
+            for chunk in chunks
+        ]
+
+        output_path = Path("data/output/BM25_indexes.txt")
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with output_path.open(
+            mode="w",
+            encoding="utf-8",
+        ) as file:
+            for index, tokens in enumerate(
+                self.tokenized_chunks
+            ):
+                file.write(f"--- CHUNK {index} ---\n")
+                file.write(" ".join(tokens))
+                file.write("\n\n")
+
+        self.bm25 = BM25Okapi(self.tokenized_chunks)
+
+        steps_logger.info(
+            "[BM25Index] BM25 index construction completed"
+        )
+
+    def search(
+        self,
+        query: str,
+        k: int,
+    ) -> list[Chunk]:
         """
         Ranks chunks with BM25 and returns the top-k results.
         """
-        print(f"[BM25Index] Searching for query: {query} with top-{k} results")
+        if not self.is_built():
+            raise RuntimeError("BM25 index has not been built")
+
+        if not query.strip():
+            raise ValueError("Query cannot be empty")
+
+        if k <= 0:
+            raise ValueError("k must be greater than zero")
+
+        query_tokens = self.tokenize(query)
+
+        if not isinstance(self.bm25, BM25Okapi):
+            raise RuntimeError("Invalid BM25 index")
+
+        steps_logger.info(
+            "[BM25Index] Searching query=%r with k=%d",
+            query,
+            k,
+        )
+
+        scores = self.bm25.get_scores(query_tokens)
+
+        ranked_indices = sorted(
+            range(len(scores)),
+            key=lambda index: scores[index],
+            reverse=True,
+        )
+
+        selected_indices = ranked_indices[:min(k, len(ranked_indices))]
+
+        steps_logger.info(
+            "[BM25Index] Retrieved %d chunks",
+            len(selected_indices),
+        )
+
+        return [
+            self.chunks[index]
+            for index in selected_indices
+        ]
 
     def tokenize(self, text: str) -> list[str]:
         """
-        Converts text into tokens used by BM25.
+        Converts text into lowercase tokens used by BM25.
         """
-        pass
+        return text.lower().split()
 
     def is_built(self) -> bool:
         """
         Returns whether the BM25 index has been built.
         """
-        pass
+        return self.bm25 is not None
 
 
 class IndexStorage:
@@ -282,9 +440,9 @@ class IndexStorage:
         self,
         directory_path: str,
     ) -> SearchIndex:
-        print(
-            f"[IndexStorage] Loading index from: "
-            f"{directory_path}"
+        steps_logger.info(
+            "[IndexStorage] Loading index from: %s",
+            directory_path
         )
 
         return BM25Index()
@@ -306,9 +464,14 @@ class IndexStorage:
 # ////////////////////////// RETRIEVAL ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 class Retriever:
+
     def __init__(self, search_index: SearchIndex) -> None:
         self.search_index = search_index
-        print(f"[Retriever] Initialized with search index: {type(search_index).__name__}")
+
+        steps_logger.info(
+            "[Retriever] Initialized with search index: %s",
+            type(search_index).__name__,
+        )
 
     def retrieve(
         self,
@@ -318,7 +481,11 @@ class Retriever:
         """
         Retrieves the top-k most relevant chunks for a query.
         """
-        print(f"[Retriever] Retrieving top-{k} chunks for query: {query}")
+        steps_logger.info(
+            "[Retriever] Retrieving top-%d chunks for query: %s",
+            k,
+            query,
+        )
         return self.search_index.search(query=query, k=k)
 
     def retrieve_sources(
@@ -456,15 +623,19 @@ class CLI:
         max_chunk_size: int = 2000,
         repository_path: str = "data/raw/vllm-0.10.1",
     ) -> None:
-        print(
-            f"[CLI] Indexing {repository_path} "
-            f"with max chunk size {max_chunk_size}"
+        steps_logger.info(
+            "[CLI] Starting repository indexing: %s",
+            repository_path,
         )
 
         reader = FileReader()
         loader = RepositoryLoader(file_reader=reader)
 
         files = loader.load(repository_path)
+
+        steps_logger.info(
+            "[CLI] Repository loading completed"
+        )
 
         text_chunker = TextChunker(
             max_chunk_size=max_chunk_size
@@ -490,25 +661,46 @@ class CLI:
 
             all_chunks.extend(file_chunks)
 
-        print(f"[CLI] Created {len(all_chunks)} chunks")
+        search_index = BM25Index()
+        search_index.build(all_chunks)
+
+        steps_logger.info(f"[CLI] Created {len(all_chunks)} chunks")
 
     def search(
         self,
         query: str,
         k: int = 10,
     ) -> None:
-        print(f"[CLI] Search requested: {query}")
+        steps_logger.info(
+            "[CLI] Search requested: %s",
+            query,
+        )
 
-        print("[CLI] Loads the saved search index")
-        # create an instance of IndexStorage and load the index
+        steps_logger.info(
+            "[CLI] Loading saved search index"
+        )
+
         index_storage = IndexStorage()
-        search_index = index_storage.load(directory_path="data/index")
-        print("[CLI] Creates a Retriever with that index")
-        # create an instance of Retriever with the loaded search index
-        retriever = Retriever(search_index=search_index)
-        print("[CLI] Calls Retriever.retrieve()")
-        # retrieve the top-k chunks for the query
-        retrieved_chunks = retriever.retrieve(query=query, k=k)
+        search_index = index_storage.load(
+            directory_path="data/index"
+        )
+
+        steps_logger.info(
+            "[CLI] Creating Retriever"
+        )
+
+        retriever = Retriever(
+            search_index=search_index
+        )
+
+        steps_logger.info(
+            "[CLI] Calling Retriever.retrieve()"
+        )
+
+        retrieved_chunks = retriever.retrieve(
+            query=query,
+            k=k,
+        )
 
     def search_dataset(
         self,
@@ -516,21 +708,31 @@ class CLI:
         k: int = 10,
         save_directory: str = "data/output/search_results",
     ) -> None:
-        print(f"[CLI] Searching dataset from: {dataset_path} with top-{k} results")
+        steps_logger.info(
+            "[CLI] Searching dataset from: %s with top-%d results",
+            dataset_path,
+            k
+        )
 
     def answer(
         self,
         question: str,
         k: int = 10,
     ) -> None:
-        print(f"[CLI] Answer requested: {question}")
+        steps_logger.info(
+            "[CLI] Answer requested: %s",
+            question
+        )
 
     def answer_dataset(
         self,
         search_results_path: str,
         save_directory: str,
     ) -> None:
-        print(f"[CLI] Answering dataset from: {search_results_path}")
+        steps_logger.info(
+            "[CLI] Answering dataset from: %s",
+            search_results_path
+        )
 
     def evaluate(
         self,
@@ -539,7 +741,11 @@ class CLI:
         k: int = 10,
         max_context_length: int = 2000,
     ) -> None:
-        print(f"[CLI] Evaluating answers from: {answer_path} against dataset: {dataset_path}")
+        steps_logger.info(
+            "[CLI] Evaluating answers from: %s against dataset: %s",
+            answer_path,
+            dataset_path
+        )
 
 
 import fire
