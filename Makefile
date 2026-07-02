@@ -34,3 +34,19 @@ lint:
 clean:
 	rm -rf __pycache__ .mypy_cache .pytest_cache
 	find . -type d -name "__pycache__" -exec rm -rf {}
+
+
+cat_index:
+	uv run python main.py index \
+		--repository_path data/raw/cats_felines_test \
+		--max_chunk_size 500
+
+cat_search1:
+	uv run python main.py search \
+		"Which feline has rosettes with central spots?" \
+		--k 5
+
+cat_search2:
+	uv run python main.py search \
+		"Which wild cat lives in prides?" \
+		--k 5
