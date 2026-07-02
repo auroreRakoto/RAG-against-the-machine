@@ -292,6 +292,8 @@ class ChunkStorage:
 # ////////////////////////////////////////////////////////////////// #
 from abc import ABC, abstractmethod
 from rank_bm25 import BM25Okapi
+import pickle
+
 
 
 class SearchIndex(ABC):
@@ -432,39 +434,85 @@ class IndexStorage:
         directory_path: str,
     ) -> None:
         """
-        Saves the index data to a directory.
+        Saves the search index to disk.
         """
-        pass
+        directory = Path(directory_path)
+
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        file_path = directory / "bm25_index.pkl"
+
+        with file_path.open("wb") as file:
+            pickle.dump(search_index, file)
+
+        steps_logger.info(
+            "[IndexStorage] Index saved to: %s",
+            file_path,
+        )
 
     def load(
         self,
         directory_path: str,
     ) -> SearchIndex:
-        steps_logger.info(
-            "[IndexStorage] Loading index from: %s",
-            directory_path
+        """
+        Loads the search index from disk.
+        """
+        file_path = (
+            Path(directory_path)
+            / "bm25_index.pkl"
         )
 
-        return BM25Index()
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Index not found: {file_path}"
+            )
+
+        with file_path.open("rb") as file:
+            search_index = pickle.load(file)
+
+        if not isinstance(search_index, SearchIndex):
+            raise TypeError(
+                "Loaded object is not a SearchIndex"
+            )
+
+        steps_logger.info(
+            "[IndexStorage] Index loaded from: %s",
+            file_path,
+        )
+
+        return search_index
 
     def exists(self, directory_path: str) -> bool:
         """
         Checks whether a saved index exists.
         """
-        pass
+        file_path = (
+            Path(directory_path)
+            / "bm25_index.pkl"
+        )
 
-    def create_directory(self, directory_path: str) -> None:
+        return file_path.exists()
+
+    def create_directory(
+        self,
+        directory_path: str,
+    ) -> None:
         """
         Creates the storage directory if necessary.
         """
-        pass
+        Path(directory_path).mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
 
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////// RETRIEVAL ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 class Retriever:
-
     def __init__(self, search_index: SearchIndex) -> None:
         self.search_index = search_index
 
@@ -663,6 +711,12 @@ class CLI:
 
         search_index = BM25Index()
         search_index.build(all_chunks)
+
+        index_storage = IndexStorage()
+        index_storage.save(
+            search_index=search_index,
+            directory_path="data/index",
+        )
 
         steps_logger.info(f"[CLI] Created {len(all_chunks)} chunks")
 
