@@ -161,10 +161,24 @@ class Chunker(ABC):
 
 
 class PythonChunker(Chunker):
-    """
-    represents a chunker that can split Python code into chunks.
-    """
-    pass
+    def find_split_index(
+        self,
+        text: str,
+        start: int,
+        max_end: int,
+    ) -> int:
+        """
+        Finds a safe line boundary for Python code.
+        """
+        if max_end >= len(text):
+            return len(text)
+
+        split_index = text.rfind("\n", start, max_end)
+
+        if split_index <= start:
+            return max_end
+
+        return split_index + 1
 
 class TextChunker(Chunker):
     def find_split_index(
@@ -456,14 +470,27 @@ class CLI:
             max_chunk_size=max_chunk_size
         )
 
+        python_chunker = PythonChunker(
+            max_chunk_size=max_chunk_size
+        )
+
+        all_chunks: list[Chunk] = []
+
         for file_path, text in files.items():
-            if file_path.endswith(".md"):
-                chunks = text_chunker.chunk(
+            if file_path.endswith(".py"):
+                file_chunks = python_chunker.chunk(
+                    text=text,
+                    file_path=file_path,
+                )
+            else:
+                file_chunks = text_chunker.chunk(
                     text=text,
                     file_path=file_path,
                 )
 
-        print(f"[CLI] Repository contains {len(files)} useful files")
+            all_chunks.extend(file_chunks)
+
+        print(f"[CLI] Created {len(all_chunks)} chunks")
 
     def search(
         self,
