@@ -1,38 +1,36 @@
-PYTHON ?= python3
-VENV_DIR ?= .venv
-
-ifeq ($(OS),Windows_NT)
-VENV_PYTHON := $(VENV_DIR)/Scripts/python.exe
-else
-VENV_PYTHON := $(VENV_DIR)/bin/python
-endif
-
 install:
-	$(VENV_PYTHON) -m pip install --upgrade pip
-	$(VENV_PYTHON) -m pip install -e .
-	$(VENV_PYTHON) -m pip install pytest
+	uv sync
 
 run:
-	$(VENV_PYTHON) -m src
+	uv run python3 main.py
 
-test:
-	$(VENV_PYTHON) -m pytest -q
+run_index:
+	uv run python main.py index --max_chunk_size 2000
 
-test-retrieval:
-	$(VENV_PYTHON) -m pytest -q tests/test_retrieval.py
+run_search:
+	uv run python3 main.py search "How to configure OpenAI server ?" --k=10
+
+run_search_dataset:
+	uv run python3 main.py search "data/raw/vllm-0.10.1" --k=10
+
+run_answer:
+	uv run python3 main.py answer "How to configure OpenAI server ?" --k=10
+
+run_answer_dataset:
+	uv run python3 main.py answer "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
+
+run_evaluate:
+	uv run python3 main.py evaluate "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
 
 debug:
-	$(VENV_PYTHON) -m pdb -m src
-
-clean:
-	rm -rf $(VENV_DIR)
-	rm -rf .pytest_cache
-	rm -rf __pycache__
-	rm -rf **/__pycache__
+	uv run python3 -m pdb main.py
 
 lint:
-	$(VENV_PYTHON) -m pip install flake8 mypy
-	$(VENV_PYTHON) -m flake8 .
-	$(VENV_PYTHON) -m mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	uv run flake8 .
+	uv run mypy . --warn-return-any --warn-unused-ignores \
+		--ignore-missing-imports --disallow-untyped-defs \
+		--check-untyped-defs
 
-.PHONY: install run test test-retrieval debug clean lint
+clean:
+	rm -rf __pycache__ .mypy_cache .pytest_cache
+	find . -type d -name "__pycache__" -exec rm -rf {}

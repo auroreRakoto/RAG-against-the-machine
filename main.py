@@ -3,8 +3,6 @@
 # ////////////////////////////////////////////////////////////////// #
 from pydantic import BaseModel
 
-from classes import MinimalAnswer
-
 
 class Chunk(BaseModel):
     """
@@ -54,12 +52,59 @@ class SearchResultsWithAnswers(SearchResults):
 # ////////////////////////////////////////////////////////////////// #
 # /////////////////////////// INGESTION //////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
-class FileReader:
-    pass
+from pathlib import Path
 
+
+class FileReader:
+    def read(self, file_path: str) -> str:
+        """
+        Reads and returns the content of a text file.
+        """
+        path = Path(file_path)
+
+        print(f"[FileReader] Reading file: {path}")
+
+        with path.open(
+            mode="r",
+            encoding="utf-8",
+            errors="ignore",
+        ) as file:
+            return file.read()
 
 class RepositoryLoader:
-    pass
+    def __init__(self, file_reader: FileReader) -> None:
+        self.file_reader = file_reader
+
+    def load(
+        self,
+        repository_path: str,
+    ) -> dict[str, str]:
+        """
+        Loads Python and Markdown files from a repository.
+        """
+        repository = Path(repository_path)
+
+        if not repository.exists():
+            raise FileNotFoundError(
+                f"Repository not found: {repository_path}"
+            )
+
+        files: dict[str, str] = {}
+
+        for file_path in repository.rglob("*"):
+            if (
+                file_path.is_file()
+                and file_path.suffix in {".py", ".md"}
+            ):
+                files[str(file_path)] = self.file_reader.read(
+                    str(file_path)
+                )
+
+        print(
+            f"[RepositoryLoader] Loaded {len(files)} files"
+        )
+
+        return files
 
 
 # ////////////////////////////////////////////////////////////////// #
@@ -341,13 +386,20 @@ class RecallEvaluator:
 class CLI:
     def index(
         self,
-        repository_path: str,
         max_chunk_size: int = 2000,
+        repository_path: str = "data/raw/vllm-0.10.1",
     ) -> None:
         print(
-            f"[CLI] Indexing repository: {repository_path} "
-            f"with max chunk size: {max_chunk_size}"
+            f"[CLI] Indexing {repository_path} "
+            f"with max chunk size {max_chunk_size}"
         )
+
+        reader = FileReader()
+        loader = RepositoryLoader(file_reader=reader)
+
+        files = loader.load(repository_path)
+
+        print(f"[CLI] Repository contains {len(files)} useful files")
 
     def search(
         self,
@@ -373,7 +425,7 @@ class CLI:
         k: int = 10,
         save_directory: str = "data/output/search_results",
     ) -> None:
-        pass
+        print(f"[CLI] Searching dataset from: {dataset_path} with top-{k} results")
 
     def answer(
         self,
@@ -387,7 +439,7 @@ class CLI:
         search_results_path: str,
         save_directory: str,
     ) -> None:
-        pass
+        print(f"[CLI] Answering dataset from: {search_results_path}")
 
     def evaluate(
         self,
@@ -396,31 +448,16 @@ class CLI:
         k: int = 10,
         max_context_length: int = 2000,
     ) -> None:
-        pass
+        print(f"[CLI] Evaluating answers from: {answer_path} against dataset: {dataset_path}")
 
+
+import fire
 
 def main():
     """
     Entry point for the CLI.
     """
-    repository_path = "test_repository.txt"
-    test_query = "What is the purpose of the Chunk class?"
-    cli = CLI()
+    fire.Fire(CLI, name="RAG CLI")
 
-    print("\n=== INDEXING ===")
-    cli.index(
-        repository_path=repository_path,
-        max_chunk_size=2000,
-    )
-
-    print("\n=== SEARCHING ===")
-    cli.search(query=test_query, k=10)
-
-    print("\n=== ANSWERING ===")
-    cli.answer(
-        question=test_query,
-        k=10,
-    )
-
-
-main()
+if  __name__ == "__main__":
+    main()
