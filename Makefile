@@ -1,29 +1,38 @@
-MANAGER     = uv
-EXEC        = python3
-# PACKAGE     = src
+PYTHON ?= python3
+VENV_DIR ?= .venv
 
-VENV_DIR    = .venv
-
-UV_CACHE    = .cache/uv-cache
+ifeq ($(OS),Windows_NT)
+VENV_PYTHON := $(VENV_DIR)/Scripts/python.exe
+else
+VENV_PYTHON := $(VENV_DIR)/bin/python
+endif
 
 install:
-	$(MANAGER) sync
+	$(VENV_PYTHON) -m pip install --upgrade pip
+	$(VENV_PYTHON) -m pip install -e .
+	$(VENV_PYTHON) -m pip install pytest
 
 run:
-	clear
-	$(MANAGER) run $(EXEC) main.py
+	$(VENV_PYTHON) -m src
+
+test:
+	$(VENV_PYTHON) -m pytest -q
+
+test-retrieval:
+	$(VENV_PYTHON) -m pytest -q tests/test_retrieval.py
 
 debug:
-	$(MANAGER) run $(EXEC) -m pdb -m $(PACKAGE)
+	$(VENV_PYTHON) -m pdb -m src
 
 clean:
 	rm -rf $(VENV_DIR)
-	rm -rf $(UV_CACHE)
 	rm -rf .pytest_cache
 	rm -rf __pycache__
+	rm -rf **/__pycache__
 
 lint:
-	$(MANAGER) run flake8 .
-	$(MANAGER) run mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	$(VENV_PYTHON) -m pip install flake8 mypy
+	$(VENV_PYTHON) -m flake8 .
+	$(VENV_PYTHON) -m mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 
-.PHONY: install run debug clean lint
+.PHONY: install run test test-retrieval debug clean lint

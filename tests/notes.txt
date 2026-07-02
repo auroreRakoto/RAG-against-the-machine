@@ -1,0 +1,86 @@
+RÈGLES GÉNÉRALES
+
+[ ] Python 3.10
+[ ] uv comme gestionnaire de projet
+[ ] Python Fire pour la CLI
+[ ] Pydantic pour toutes les classes de données
+[ ] flake8
+[ ] gestion propre des erreurs
+[ ] tqdm pour les opérations longues
+[ ] Qwen/Qwen3-0.6B compatible
+
+MODÈLES DE DONNÉES OBLIGATOIRES
+
+[ ] MinimalSource
+    [ ] file_path
+    [ ] first_character_index
+    [ ] last_character_index
+
+[ ] UnansweredQuestion
+    [ ] question_id
+    [ ] question
+
+[ ] AnsweredQuestion
+    [ ] hérite de UnansweredQuestion
+    [ ] sources
+    [ ] answer
+
+[ ] RagDataset
+    [ ] rag_questions
+
+[ ] MinimalSearchResults
+    [ ] question_id
+    [ ] question
+    [ ] retrieved_sources
+
+[ ] MinimalAnswer
+    [ ] hérite de MinimalSearchResults
+    [ ] answer
+
+[ ] StudentSearchResults
+    [ ] search_results
+    [ ] k
+
+[ ] StudentSearchResultsAndAnswer
+    [ ] search_results contenant des MinimalAnswer
+
+
+
+src/
+└── student/
+    ├── __main__.py
+    ├── cli.py
+    │
+    ├── models/
+    │   ├── chunk.py
+    │   ├── source.py
+    │   ├── question.py
+    │   └── search_result.py
+    │
+    ├── ingestion/
+    │   ├── repository_loader.py
+    │   └── file_filter.py
+    │
+    ├── chunking/
+    │   ├── base_chunker.py
+    │   ├── python_chunker.py
+    │   └── text_chunker.py
+    │
+    ├── indexing/
+    │   ├── bm25_index.py
+    │   └── index_storage.py
+    │
+    ├── retrieval/
+    │   └── retriever.py
+    │
+    ├── generation/
+    │   ├── context_builder.py
+    │   └── answer_generator.py
+    │
+    ├── evaluation/
+    │   ├── overlap.py
+    │   └── recall.py
+    │
+    └── dataset/
+        ├── dataset_loader.py
+        └── dataset_processor.py
