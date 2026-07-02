@@ -570,7 +570,60 @@ class Retriever:
 # ////////////////////////// GENERATION //////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 class ContextBuilder:
-    pass
+    def build(
+        self,
+        chunks: list[Chunk],
+        max_context_length: int = 8000,
+    ) -> str:
+        """
+        Builds a text context from retrieved chunks.
+        """
+        if max_context_length <= 0:
+            raise ValueError(
+                "max_context_length must be greater than zero"
+            )
+
+        context_parts: list[str] = []
+        current_length = 0
+
+        steps_logger.info(
+            "[ContextBuilder] Building context from %d chunks",
+            len(chunks),
+        )
+
+        for index, chunk in enumerate(chunks):
+            chunk_context = (
+                f"--- SOURCE {index + 1} ---\n"
+                f"File: {chunk.file_path}\n"
+                f"Characters: "
+                f"{chunk.first_character_index}-"
+                f"{chunk.last_character_index}\n\n"
+                f"{chunk.text}\n\n"
+            )
+
+            remaining_length = (
+                max_context_length - current_length
+            )
+
+            if remaining_length <= 0:
+                break
+
+            if len(chunk_context) > remaining_length:
+                chunk_context = chunk_context[
+                    :remaining_length
+                ]
+
+            context_parts.append(chunk_context)
+            current_length += len(chunk_context)
+
+        context = "".join(context_parts)
+
+        steps_logger.info(
+            "[ContextBuilder] Context created with %d characters",
+            len(context),
+        )
+
+        return context
 
 
 class PromptBuilder:
@@ -756,6 +809,32 @@ class CLI:
             k=k,
         )
 
+        context_builder = ContextBuilder()
+
+        context = context_builder.build(
+            chunks=retrieved_chunks,
+            max_context_length=8000,
+        )
+
+        context_path = Path(
+            "data/output/context.txt"
+        )
+
+        context_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        context_path.write_text(
+            context,
+            encoding="utf-8",
+        )
+
+        steps_logger.info(
+            "[CLI] Context saved to: %s",
+            context_path,
+        )
+
         output_path = Path(
             "data/output/retrieved_chunks.txt"
         )
@@ -839,7 +918,6 @@ class CLI:
             answer_path,
             dataset_path
         )
-
 
 import fire
 
