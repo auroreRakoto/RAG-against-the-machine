@@ -756,6 +756,45 @@ class CLI:
             k=k,
         )
 
+        output_path = Path(
+            "data/output/retrieved_chunks.txt"
+        )
+
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with output_path.open(
+            mode="w",
+            encoding="utf-8",
+        ) as file:
+            for index, chunk in enumerate(
+                retrieved_chunks
+            ):
+                file.write(
+                    f"--- RESULT {index + 1} ---\n"
+                )
+                file.write(
+                    f"File: {chunk.file_path}\n"
+                )
+                file.write(
+                    f"Start: "
+                    f"{chunk.first_character_index}\n"
+                )
+                file.write(
+                    f"End: "
+                    f"{chunk.last_character_index}\n\n"
+                )
+                file.write(chunk.text)
+                file.write("\n\n")
+
+        steps_logger.info(
+            "[CLI] Saved %d retrieved chunks to %s",
+            len(retrieved_chunks),
+            output_path,
+        )
+
     def search_dataset(
         self,
         dataset_path: str,

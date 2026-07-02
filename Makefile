@@ -8,7 +8,7 @@ run_index:
 	uv run python main.py index --max_chunk_size 2000
 
 run_search:
-	uv run python3 main.py search "How to configure OpenAI server ?" --k=10
+	uv run python3 main.py search "How is CUDA initialized?" --k=5
 
 run_search_dataset:
 	uv run python3 main.py search "data/raw/vllm-0.10.1" --k=10
