@@ -569,6 +569,9 @@ class Retriever:
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////// GENERATION //////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
+from transformers import AutoTokenizer
+
+
 class ContextBuilder:
     def build(
         self,
@@ -627,8 +630,40 @@ class ContextBuilder:
 
 
 class PromptBuilder:
-    pass
+    def build(
+        self,
+        question: str,
+        context: str,
+    ) -> str:
+        """
+        Builds the final prompt sent to the language model.
+        """
+        if not question.strip():
+            raise ValueError("Question cannot be empty")
 
+        if not context.strip():
+            raise ValueError("Context cannot be empty")
+
+        prompt = (
+            "You are a retrieval-augmented assistant.\n"
+            "Answer the question using only the provided context.\n"
+            "Do not use external knowledge.\n"
+            "If the context does not contain the answer, say that "
+            "the provided sources do not contain enough information.\n"
+            "Cite the source file names when useful.\n\n"
+            "CONTEXT:\n"
+            f"{context}\n"
+            "QUESTION:\n"
+            f"{question}\n\n"
+            "ANSWER:"
+        )
+
+        steps_logger.info(
+            "[PromptBuilder] Prompt created with %d characters",
+            len(prompt),
+        )
+
+        return prompt
 
 class LanguageModel(ABC):
     @abstractmethod
@@ -637,7 +672,98 @@ class LanguageModel(ABC):
 
 
 class QwenLanguageModel(LanguageModel):
-    pass
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen3-0.6B",
+    ) -> None:
+        self.model_name = model_name
+
+        steps_logger.info(
+            "[QwenLanguageModel] Loading tokenizer: %s",
+            model_name,
+        )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+        )
+
+        steps_logger.info(
+            "[QwenLanguageModel] Tokenizer loaded"
+        )
+
+    def tokenize_prompt(
+        self,
+        prompt: str,
+    ) -> list[int]:
+        """
+        Tokenizes the prompt with the Qwen tokenizer.
+        """
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+
+        token_ids = self.tokenizer.encode(
+            prompt,
+            add_special_tokens=True,
+        )
+
+        steps_logger.info(
+            "[QwenLanguageModel] Prompt tokenized into %d tokens",
+            len(token_ids),
+        )
+
+        return token_ids
+
+    def save_prompt_tokens(
+        self,
+        prompt: str,
+        output_path: str = "data/output/qwen_tokens.txt",
+    ) -> None:
+        """
+        Saves Qwen token ids and readable tokens to a file.
+        """
+        token_ids = self.tokenize_prompt(prompt)
+
+        tokens = self.tokenizer.convert_ids_to_tokens(
+            token_ids
+        )
+
+        path = Path(output_path)
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with path.open(
+            mode="w",
+            encoding="utf-8",
+        ) as file:
+            file.write("MODEL:\n")
+            file.write(f"{self.model_name}\n\n")
+
+            file.write("TOKEN COUNT:\n")
+            file.write(f"{len(token_ids)}\n\n")
+
+            file.write("TOKENS:\n")
+            for index, token in enumerate(tokens):
+                file.write(
+                    f"{index}: {token_ids[index]} -> {token}\n"
+                )
+
+        steps_logger.info(
+            "[QwenLanguageModel] Qwen tokens saved to: %s",
+            path,
+        )
+
+    def generate(
+        self,
+        prompt: str,
+    ) -> str:
+        """
+        Generates an answer from a prompt.
+        """
+        raise NotImplementedError(
+            "Generation is not implemented yet"
+        )
 
 
 class AnswerGenerator:
@@ -816,6 +942,20 @@ class CLI:
             max_context_length=8000,
         )
 
+        prompt_builder = PromptBuilder()
+
+        prompt = prompt_builder.build(
+            question=query,
+            context=context,
+        )
+
+        language_model = QwenLanguageModel()
+
+        language_model.save_prompt_tokens(
+            prompt=prompt,
+            output_path="data/output/qwen_tokens.txt",
+        )
+
         context_path = Path(
             "data/output/context.txt"
         )
@@ -828,6 +968,25 @@ class CLI:
         context_path.write_text(
             context,
             encoding="utf-8",
+        )
+
+        prompt_path = Path(
+            "data/output/prompt.txt"
+        )
+
+        prompt_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        prompt_path.write_text(
+            prompt,
+            encoding="utf-8",
+        )
+
+        steps_logger.info(
+            "[CLI] Prompt saved to: %s",
+            prompt_path,
         )
 
         steps_logger.info(
