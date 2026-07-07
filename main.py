@@ -1003,89 +1003,24 @@ class Saving:
         )
 
 class CLI:
-    def _load_retriever(self) -> Retriever:
-        """
-        Loads the saved index and creates a retriever.
-        """
-        index_storage = IndexStorage()
-        search_index = index_storage.load(
-            directory_path="data/index"
-        )
-
-        return Retriever(
-            search_index=search_index
-        )
-
     def _retrieve_chunks(
         self,
         query: str,
         k: int,
     ) -> list[Chunk]:
         """
+        Loads the saved index and creates a retriever.
         Retrieves chunks for a query using the saved index.
         """
-        retriever = self._load_retriever()
+        index_storage = IndexStorage()
+        search_index = index_storage.load(
+            directory_path="data/index"
+        )
+
+        retriever = Retriever(search_index)
 
         return retriever.retrieve(
             query=query,
-            k=k,
-        )
-
-    def _search_results(
-        self,
-        retrieved_chunks: list[Chunk],
-        query: str,
-        k: int
-    ) -> SearchResults:
-        retrieved_sources = [
-            MinimalSource(
-                file_path=chunk.file_path,
-                first_character_index=chunk.first_character_index,
-                last_character_index=chunk.last_character_index,
-            )
-            for chunk in retrieved_chunks
-        ]
-
-        search_result = SearchResults(
-            search_results=[
-                MinimalSearchResults(
-                    question_id="manual",
-                    question=query,
-                    retrieved_sources=retrieved_sources,
-                )
-            ],
-            k=k,
-        )
-        return search_result
-
-    def _answer_results(
-        self,
-        retrieved_chunks: list[Chunk],
-        question: str,
-        answer: str,
-        k: int,
-    ) -> SearchResultsWithAnswers:
-        """
-        Builds structured answer results from retrieved chunks.
-        """
-        retrieved_sources = [
-            MinimalSource(
-                file_path=chunk.file_path,
-                first_character_index=chunk.first_character_index,
-                last_character_index=chunk.last_character_index,
-            )
-            for chunk in retrieved_chunks
-        ]
-
-        return SearchResultsWithAnswers(
-            search_results=[
-                MinimalAnswer(
-                    question_id="manual",
-                    question=question,
-                    retrieved_sources=retrieved_sources,
-                    answer=answer,
-                )
-            ],
             k=k,
         )
 
@@ -1112,21 +1047,6 @@ class CLI:
         steps_logger.info(
             "[CLI] Saved JSON file to: %s",
             path,
-        )
-
-    def _build_context(
-        self,
-        retrieved_chunks: list[Chunk],
-        max_context_length: int = 8000,
-    ) -> str:
-        """
-        Builds context from retrieved chunks.
-        """
-        context_builder = ContextBuilder()
-
-        return context_builder.build(
-            chunks=retrieved_chunks,
-            max_context_length=max_context_length,
         )
 
     def index(
@@ -1183,6 +1103,33 @@ class CLI:
 
         steps_logger.info(f"[CLI] Created {len(all_chunks)} chunks")
 
+    def _search_results(
+        self,
+        retrieved_chunks: list[Chunk],
+        query: str,
+        k: int
+    ) -> SearchResults:
+        retrieved_sources = [
+            MinimalSource(
+                file_path=chunk.file_path,
+                first_character_index=chunk.first_character_index,
+                last_character_index=chunk.last_character_index,
+            )
+            for chunk in retrieved_chunks
+        ]
+
+        search_result = SearchResults(
+            search_results=[
+                MinimalSearchResults(
+                    question_id="manual",
+                    question=query,
+                    retrieved_sources=retrieved_sources,
+                )
+            ],
+            k=k,
+        )
+        return search_result
+
     def search(
         self,
         query: str,
@@ -1192,30 +1139,11 @@ class CLI:
         Searches the index and saves retrieved chunks and context.
         """
         Saving.log_info("[CLI] Search requested: %s", query)
-
-        retrieved_chunks = self._retrieve_chunks(
-            query=query,
-            k=k,
-        )
-
-        search_result = self._search_results(
-            retrieved_chunks=retrieved_chunks,
-            query=query,
-            k=k
-        )
-
-        self._save_json_file(
-            file_path="data/output/search_result.json",
-            content=search_result,
-        )
-
-        context = self._build_context(
-            retrieved_chunks=retrieved_chunks,
-            max_context_length=8000,
-        )
-
+        retrieved_chunks = self._retrieve_chunks(query, k)
         Saving.save_retrieved_chunks(retrieved_chunks)
-        Saving.save_text_file("data/output/context.txt", context)
+
+        search_result = self._search_results(retrieved_chunks, query, k)
+        self._save_json_file("data/output/search_result.json", search_result)
 
     def search_dataset(
         self,
@@ -1229,6 +1157,51 @@ class CLI:
             k
         )
 
+    def _answer_results(
+        self,
+        retrieved_chunks: list[Chunk],
+        question: str,
+        answer: str,
+        k: int,
+    ) -> SearchResultsWithAnswers:
+        """
+        Builds structured answer results from retrieved chunks.
+        """
+        retrieved_sources = [
+            MinimalSource(
+                file_path=chunk.file_path,
+                first_character_index=chunk.first_character_index,
+                last_character_index=chunk.last_character_index,
+            )
+            for chunk in retrieved_chunks
+        ]
+
+        return SearchResultsWithAnswers(
+            search_results=[
+                MinimalAnswer(
+                    question_id="manual",
+                    question=question,
+                    retrieved_sources=retrieved_sources,
+                    answer=answer,
+                )
+            ],
+            k=k,
+        )
+
+    def _build_context(
+        self,
+        retrieved_chunks: list[Chunk],
+        max_context_length: int = 8000,
+    ) -> str:
+        """
+        Builds context from retrieved chunks.
+        """
+        context_builder = ContextBuilder()
+
+        context = context_builder.build(retrieved_chunks, max_context_length)
+
+        return context
+
     def answer(
         self,
         question: str,
@@ -1237,67 +1210,31 @@ class CLI:
         """
         Answers a question using retrieved context and Qwen.
         """
-        steps_logger.info(
-            "[CLI] Answer requested: %s",
-            question,
-        )
+        Saving.log_info("[CLI] Answer requested: %s", question)
 
-        retrieved_chunks = self._retrieve_chunks(
-            query=question,
-            k=k,
-        )
+        retrieved_chunks = self._retrieve_chunks(question, k)
 
-        context = self._build_context(
-            retrieved_chunks=retrieved_chunks,
-            max_context_length=8000,
-        )
+        context = self._build_context(retrieved_chunks, 8000)
 
         prompt_builder = PromptBuilder()
 
-        prompt = prompt_builder.build(
-            question=question,
-            context=context,
-        )
+        prompt = prompt_builder.build(question, context)
 
-        Saving.save_retrieved_chunks(
-            retrieved_chunks=retrieved_chunks,
-        )
-
-        Saving.save_text_file(
-            file_path="data/output/context.txt",
-            content=context,
-        )
-
-        Saving.save_text_file(
-            file_path="data/output/prompt.txt",
-            content=prompt,
-        )
+        Saving.save_retrieved_chunks(retrieved_chunks)
+        Saving.save_text_file("data/output/context.txt", context)
+        Saving.save_text_file("data/output/prompt.txt", prompt)
 
         language_model = QwenLanguageModel()
 
-        language_model.save_prompt_tokens(
-            prompt=prompt,
-            output_path="data/output/qwen_tokens.txt",
-        )
+        language_model.save_prompt_tokens(prompt, "data/output/qwen_tokens.txt")
 
         answer = language_model.generate(prompt)
 
-        answer_result = self._answer_results(
-            retrieved_chunks=retrieved_chunks,
-            question=question,
-            answer=answer,
-            k=k,
-        )
+        answer_res = self._answer_results(retrieved_chunks, question, answer, k)
 
-        self._save_json_file(
-            file_path="data/output/answer_result.json",
-            content=answer_result,
-        )
+        self._save_json_file("data/output/answer_result.json", answer_result)
 
-        Saving.save_text_file(
-            file_path="data/output/answer.txt",
-            content=answer,
-        )
+        Saving.save_text_file("data/output/answer.txt", answer)
 
     def answer_dataset(
         self,
