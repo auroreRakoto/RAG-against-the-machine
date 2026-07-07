@@ -935,6 +935,73 @@ class RecallEvaluator:
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////////// CLI /////////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
+class Saving:
+    @staticmethod
+    def save_text_file(file_path: str, content: str,) -> None:
+        """
+        Saves text content to a file.
+        """
+        path = Path(file_path)
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        path.write_text(
+            content,
+            encoding="utf-8",
+        )
+
+        steps_logger.info(
+            "[CLI] Saved text file to: %s",
+            path,
+        )
+
+    @staticmethod
+    def save_retrieved_chunks(
+        retrieved_chunks: list[Chunk],
+        file_path: str = "data/output/retrieved_chunks.txt"
+    ) -> None:
+        """
+        Saves retrieved chunks to a readable debug file.
+        """
+        path = Path(file_path)
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with path.open(
+            mode="w",
+            encoding="utf-8",
+        ) as file:
+            for index, chunk in enumerate(retrieved_chunks):
+                file.write(f"--- RESULT {index + 1} ---\n")
+                file.write(f"File: {chunk.file_path}\n")
+                file.write(
+                    f"Start: {chunk.first_character_index}\n"
+                )
+                file.write(
+                    f"End: {chunk.last_character_index}\n\n"
+                )
+                file.write(chunk.text)
+                file.write("\n\n")
+
+        steps_logger.info(
+            "[CLI] Saved %d retrieved chunks to %s",
+            len(retrieved_chunks),
+            path,
+        )
+
+    @staticmethod
+    def log_info(msg:str, arg:str):
+        steps_logger.info(
+            msg,
+            arg
+        )
+
 class CLI:
     def _load_retriever(self) -> Retriever:
         """
@@ -991,66 +1058,35 @@ class CLI:
         )
         return search_result
 
-    def _save_text_file(
-        self,
-        file_path: str,
-        content: str,
-    ) -> None:
-        """
-        Saves text content to a file.
-        """
-        path = Path(file_path)
-
-        path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        path.write_text(
-            content,
-            encoding="utf-8",
-        )
-
-        steps_logger.info(
-            "[CLI] Saved text file to: %s",
-            path,
-        )
-
-    def _save_retrieved_chunks(
+    def _answer_results(
         self,
         retrieved_chunks: list[Chunk],
-        file_path: str = "data/output/retrieved_chunks.txt",
-    ) -> None:
+        question: str,
+        answer: str,
+        k: int,
+    ) -> SearchResultsWithAnswers:
         """
-        Saves retrieved chunks to a readable debug file.
+        Builds structured answer results from retrieved chunks.
         """
-        path = Path(file_path)
+        retrieved_sources = [
+            MinimalSource(
+                file_path=chunk.file_path,
+                first_character_index=chunk.first_character_index,
+                last_character_index=chunk.last_character_index,
+            )
+            for chunk in retrieved_chunks
+        ]
 
-        path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        with path.open(
-            mode="w",
-            encoding="utf-8",
-        ) as file:
-            for index, chunk in enumerate(retrieved_chunks):
-                file.write(f"--- RESULT {index + 1} ---\n")
-                file.write(f"File: {chunk.file_path}\n")
-                file.write(
-                    f"Start: {chunk.first_character_index}\n"
+        return SearchResultsWithAnswers(
+            search_results=[
+                MinimalAnswer(
+                    question_id="manual",
+                    question=question,
+                    retrieved_sources=retrieved_sources,
+                    answer=answer,
                 )
-                file.write(
-                    f"End: {chunk.last_character_index}\n\n"
-                )
-                file.write(chunk.text)
-                file.write("\n\n")
-
-        steps_logger.info(
-            "[CLI] Saved %d retrieved chunks to %s",
-            len(retrieved_chunks),
-            path,
+            ],
+            k=k,
         )
 
     def _save_json_file(
@@ -1155,10 +1191,7 @@ class CLI:
         """
         Searches the index and saves retrieved chunks and context.
         """
-        steps_logger.info(
-            "[CLI] Search requested: %s",
-            query,
-        )
+        Saving.log_info("[CLI] Search requested: %s", query)
 
         retrieved_chunks = self._retrieve_chunks(
             query=query,
@@ -1181,14 +1214,8 @@ class CLI:
             max_context_length=8000,
         )
 
-        self._save_retrieved_chunks(
-            retrieved_chunks=retrieved_chunks,
-        )
-
-        self._save_text_file(
-            file_path="data/output/context.txt",
-            content=context,
-        )
+        Saving.save_retrieved_chunks(retrieved_chunks)
+        Saving.save_text_file("data/output/context.txt", context)
 
     def search_dataset(
         self,
@@ -1232,16 +1259,16 @@ class CLI:
             context=context,
         )
 
-        self._save_retrieved_chunks(
+        Saving.save_retrieved_chunks(
             retrieved_chunks=retrieved_chunks,
         )
 
-        self._save_text_file(
+        Saving.save_text_file(
             file_path="data/output/context.txt",
             content=context,
         )
 
-        self._save_text_file(
+        Saving.save_text_file(
             file_path="data/output/prompt.txt",
             content=prompt,
         )
@@ -1255,7 +1282,19 @@ class CLI:
 
         answer = language_model.generate(prompt)
 
-        self._save_text_file(
+        answer_result = self._answer_results(
+            retrieved_chunks=retrieved_chunks,
+            question=question,
+            answer=answer,
+            k=k,
+        )
+
+        self._save_json_file(
+            file_path="data/output/answer_result.json",
+            content=answer_result,
+        )
+
+        Saving.save_text_file(
             file_path="data/output/answer.txt",
             content=answer,
         )
