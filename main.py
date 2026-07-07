@@ -102,6 +102,10 @@ class MinimalSearchResults(BaseModel):
     retrieved_sources: list[MinimalSource]
 
 
+class MinimalAnswer(MinimalSearchResults):
+    answer: str
+
+
 class SearchResults(BaseModel):
     search_results: list[MinimalSearchResults]
     k: int
@@ -569,7 +573,7 @@ class Retriever:
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////// GENERATION //////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
-from transformers import AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 class ContextBuilder:
@@ -655,7 +659,9 @@ class PromptBuilder:
             f"{context}\n"
             "QUESTION:\n"
             f"{question}\n\n"
-            "ANSWER:"
+            "Write a concise answer in one paragraph.\n"
+            "Do not repeat the word ANSWER.\n"
+            "FINAL ANSWER:\n"
         )
 
         steps_logger.info(
@@ -689,6 +695,19 @@ class QwenLanguageModel(LanguageModel):
 
         steps_logger.info(
             "[QwenLanguageModel] Tokenizer loaded"
+        )
+
+        steps_logger.info(
+            "[QwenLanguageModel] Loading model: %s",
+            model_name,
+        )
+
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+        )
+
+        steps_logger.info(
+            "[QwenLanguageModel] Model loaded"
         )
 
     def tokenize_prompt(
@@ -761,9 +780,57 @@ class QwenLanguageModel(LanguageModel):
         """
         Generates an answer from a prompt.
         """
-        raise NotImplementedError(
-            "Generation is not implemented yet"
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+
+        inputs = self.tokenizer(
+            prompt,
+            return_tensors="pt",
         )
+
+        output_ids = self.model.generate(
+            **inputs,
+            max_new_tokens=80,
+            do_sample=False,
+            repetition_penalty=1.15,
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.eos_token_id,
+        )
+
+        generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+
+        answer = self.tokenizer.decode(
+            generated_ids,
+            skip_special_tokens=True,
+        )
+
+        answer = answer.strip()
+
+        if "FINAL ANSWER:" in answer:
+            answer = answer.split("FINAL ANSWER:", 1)[-1].strip()
+
+        if "\nQUESTION:" in answer:
+            answer = answer.split("\nQUESTION:", 1)[0].strip()
+
+        stop_markers = [
+            "\nAnswer the question",
+            "\nCite the source",
+            "\n```python",
+            "\nAnswer:",
+        ]
+
+        for marker in stop_markers:
+            if marker in answer:
+                answer = answer.split(marker, 1)[0].strip()
+
+        answer = answer.strip("`").strip()
+
+        steps_logger.info(
+            "[QwenLanguageModel] Generated answer with %d characters",
+            len(answer),
+        )
+
+        return answer.strip()
 
 
 class AnswerGenerator:
@@ -845,6 +912,111 @@ class RecallEvaluator:
 # ////////////////////////////// CLI /////////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 class CLI:
+    def _load_retriever(self) -> Retriever:
+        """
+        Loads the saved index and creates a retriever.
+        """
+        index_storage = IndexStorage()
+        search_index = index_storage.load(
+            directory_path="data/index"
+        )
+
+        return Retriever(
+            search_index=search_index
+        )
+
+    def _retrieve_chunks(
+        self,
+        query: str,
+        k: int,
+    ) -> list[Chunk]:
+        """
+        Retrieves chunks for a query using the saved index.
+        """
+        retriever = self._load_retriever()
+
+        return retriever.retrieve(
+            query=query,
+            k=k,
+        )
+
+    def _save_text_file(
+        self,
+        file_path: str,
+        content: str,
+    ) -> None:
+        """
+        Saves text content to a file.
+        """
+        path = Path(file_path)
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        path.write_text(
+            content,
+            encoding="utf-8",
+        )
+
+        steps_logger.info(
+            "[CLI] Saved text file to: %s",
+            path,
+        )
+
+    def _save_retrieved_chunks(
+        self,
+        retrieved_chunks: list[Chunk],
+        file_path: str = "data/output/retrieved_chunks.txt",
+    ) -> None:
+        """
+        Saves retrieved chunks to a readable debug file.
+        """
+        path = Path(file_path)
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with path.open(
+            mode="w",
+            encoding="utf-8",
+        ) as file:
+            for index, chunk in enumerate(retrieved_chunks):
+                file.write(f"--- RESULT {index + 1} ---\n")
+                file.write(f"File: {chunk.file_path}\n")
+                file.write(
+                    f"Start: {chunk.first_character_index}\n"
+                )
+                file.write(
+                    f"End: {chunk.last_character_index}\n\n"
+                )
+                file.write(chunk.text)
+                file.write("\n\n")
+
+        steps_logger.info(
+            "[CLI] Saved %d retrieved chunks to %s",
+            len(retrieved_chunks),
+            path,
+        )
+
+    def _build_context(
+        self,
+        retrieved_chunks: list[Chunk],
+        max_context_length: int = 8000,
+    ) -> str:
+        """
+        Builds context from retrieved chunks.
+        """
+        context_builder = ContextBuilder()
+
+        return context_builder.build(
+            chunks=retrieved_chunks,
+            max_context_length=max_context_length,
+        )
+
     def index(
         self,
         max_chunk_size: int = 2000,
@@ -904,133 +1076,31 @@ class CLI:
         query: str,
         k: int = 10,
     ) -> None:
+        """
+        Searches the index and saves retrieved chunks and context.
+        """
         steps_logger.info(
             "[CLI] Search requested: %s",
             query,
         )
 
-        steps_logger.info(
-            "[CLI] Loading saved search index"
-        )
-
-        index_storage = IndexStorage()
-        search_index = index_storage.load(
-            directory_path="data/index"
-        )
-
-        steps_logger.info(
-            "[CLI] Creating Retriever"
-        )
-
-        retriever = Retriever(
-            search_index=search_index
-        )
-
-        steps_logger.info(
-            "[CLI] Calling Retriever.retrieve()"
-        )
-
-        retrieved_chunks = retriever.retrieve(
+        retrieved_chunks = self._retrieve_chunks(
             query=query,
             k=k,
         )
 
-        context_builder = ContextBuilder()
-
-        context = context_builder.build(
-            chunks=retrieved_chunks,
+        context = self._build_context(
+            retrieved_chunks=retrieved_chunks,
             max_context_length=8000,
         )
 
-        prompt_builder = PromptBuilder()
-
-        prompt = prompt_builder.build(
-            question=query,
-            context=context,
+        self._save_retrieved_chunks(
+            retrieved_chunks=retrieved_chunks,
         )
 
-        language_model = QwenLanguageModel()
-
-        language_model.save_prompt_tokens(
-            prompt=prompt,
-            output_path="data/output/qwen_tokens.txt",
-        )
-
-        context_path = Path(
-            "data/output/context.txt"
-        )
-
-        context_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        context_path.write_text(
-            context,
-            encoding="utf-8",
-        )
-
-        prompt_path = Path(
-            "data/output/prompt.txt"
-        )
-
-        prompt_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        prompt_path.write_text(
-            prompt,
-            encoding="utf-8",
-        )
-
-        steps_logger.info(
-            "[CLI] Prompt saved to: %s",
-            prompt_path,
-        )
-
-        steps_logger.info(
-            "[CLI] Context saved to: %s",
-            context_path,
-        )
-
-        output_path = Path(
-            "data/output/retrieved_chunks.txt"
-        )
-
-        output_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        with output_path.open(
-            mode="w",
-            encoding="utf-8",
-        ) as file:
-            for index, chunk in enumerate(
-                retrieved_chunks
-            ):
-                file.write(
-                    f"--- RESULT {index + 1} ---\n"
-                )
-                file.write(
-                    f"File: {chunk.file_path}\n"
-                )
-                file.write(
-                    f"Start: "
-                    f"{chunk.first_character_index}\n"
-                )
-                file.write(
-                    f"End: "
-                    f"{chunk.last_character_index}\n\n"
-                )
-                file.write(chunk.text)
-                file.write("\n\n")
-
-        steps_logger.info(
-            "[CLI] Saved %d retrieved chunks to %s",
-            len(retrieved_chunks),
-            output_path,
+        self._save_text_file(
+            file_path="data/output/context.txt",
+            content=context,
         )
 
     def search_dataset(
@@ -1050,9 +1120,57 @@ class CLI:
         question: str,
         k: int = 10,
     ) -> None:
+        """
+        Answers a question using retrieved context and Qwen.
+        """
         steps_logger.info(
             "[CLI] Answer requested: %s",
-            question
+            question,
+        )
+
+        retrieved_chunks = self._retrieve_chunks(
+            query=question,
+            k=k,
+        )
+
+        context = self._build_context(
+            retrieved_chunks=retrieved_chunks,
+            max_context_length=8000,
+        )
+
+        prompt_builder = PromptBuilder()
+
+        prompt = prompt_builder.build(
+            question=question,
+            context=context,
+        )
+
+        self._save_retrieved_chunks(
+            retrieved_chunks=retrieved_chunks,
+        )
+
+        self._save_text_file(
+            file_path="data/output/context.txt",
+            content=context,
+        )
+
+        self._save_text_file(
+            file_path="data/output/prompt.txt",
+            content=prompt,
+        )
+
+        language_model = QwenLanguageModel()
+
+        language_model.save_prompt_tokens(
+            prompt=prompt,
+            output_path="data/output/qwen_tokens.txt",
+        )
+
+        answer = language_model.generate(prompt)
+
+        self._save_text_file(
+            file_path="data/output/answer.txt",
+            content=answer,
         )
 
     def answer_dataset(
