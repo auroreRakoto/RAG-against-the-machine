@@ -3,3 +3,10 @@ searchResults class names
 end_index in textChunker
 
 load text in repo loader
+
+change for dans 
+    - search result 
+    - answer result
+    - evaluate
+
+clean up answer

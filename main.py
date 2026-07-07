@@ -885,10 +885,48 @@ class RecallEvaluator:
         k_values: list[int],
     ) -> dict[int, float]:
         """
-        Evaluates the recall@k for the given expected dataset
-            and search results.
+        Evaluates recall@k for multiple k values.
         """
-        pass
+        if not expected_dataset.rag_questions:
+            raise ValueError("Expected dataset cannot be empty")
+
+        results_by_question_id = {
+            result.question_id: result
+            for result in search_results.search_results
+        }
+
+        scores: dict[int, float] = {}
+
+        for k in k_values:
+            total_score = 0.0
+            evaluated_questions = 0
+
+            for expected_question in expected_dataset.rag_questions:
+                if not isinstance(expected_question, AnsweredQuestion):
+                    continue
+
+                retrieved_result = results_by_question_id.get(
+                    expected_question.question_id
+                )
+
+                if retrieved_result is None:
+                    question_score = 0.0
+                else:
+                    question_score = self.evaluate_question(
+                        expected_question=expected_question,
+                        retrieved_result=retrieved_result,
+                        k=k,
+                    )
+
+                total_score += question_score
+                evaluated_questions += 1
+
+            if evaluated_questions == 0:
+                scores[k] = 0.0
+            else:
+                scores[k] = total_score / evaluated_questions
+
+        return scores
 
     def evaluate_question(
         self,
@@ -897,8 +935,19 @@ class RecallEvaluator:
         k: int,
     ) -> float:
         """
-        Evaluates the recall@k for a single question."""
-        pass
+        Evaluates recall@k for a single question.
+        """
+        if not expected_question.sources:
+            return 0.0
+
+        retrieved_sources = retrieved_result.retrieved_sources[:k]
+
+        found_sources = self.count_found_sources(
+            expected_sources=expected_question.sources,
+            retrieved_sources=retrieved_sources,
+        )
+
+        return found_sources / len(expected_question.sources)
 
     def is_source_found(
         self,
@@ -906,9 +955,21 @@ class RecallEvaluator:
         retrieved_sources: list[MinimalSource],
     ) -> bool:
         """
-        Checks if the expected source is found in the retrieved sources.
+        Checks whether an expected source is found in retrieved sources.
         """
-        pass
+        for retrieved_source in retrieved_sources:
+            if expected_source.file_path != retrieved_source.file_path:
+                continue
+
+            overlap_ratio = self.calculate_overlap_ratio(
+                first_source=expected_source,
+                second_source=retrieved_source,
+            )
+
+            if overlap_ratio >= self.MINIMUM_OVERLAP_RATIO:
+                return True
+
+        return False
 
     def calculate_overlap_ratio(
         self,
@@ -916,10 +977,32 @@ class RecallEvaluator:
         second_source: MinimalSource,
     ) -> float:
         """
-        Calculates the overlap ratio between two sources based on
-            their character indices.
+        Calculates overlap ratio between two source intervals.
         """
-        pass
+        first_length = (
+            first_source.last_character_index
+            - first_source.first_character_index
+        )
+
+        if first_length <= 0:
+            return 0.0
+
+        overlap_start = max(
+            first_source.first_character_index,
+            second_source.first_character_index,
+        )
+
+        overlap_end = min(
+            first_source.last_character_index,
+            second_source.last_character_index,
+        )
+
+        overlap_length = max(
+            0,
+            overlap_end - overlap_start,
+        )
+
+        return overlap_length / first_length
 
     def count_found_sources(
         self,
@@ -927,14 +1010,26 @@ class RecallEvaluator:
         retrieved_sources: list[MinimalSource],
     ) -> int:
         """
-        Counts the number of expected sources found in the retrieved sources.
+        Counts how many expected sources are found.
         """
-        pass
+        found_sources = 0
+
+        for expected_source in expected_sources:
+            if self.is_source_found(
+                expected_source=expected_source,
+                retrieved_sources=retrieved_sources,
+            ):
+                found_sources += 1
+
+        return found_sources
 
 
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////////// CLI /////////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
+import json
+
+
 class Saving:
     @staticmethod
     def save_text_file(file_path: str, content: str,) -> None:
@@ -1232,7 +1327,7 @@ class CLI:
 
         answer_res = self._answer_results(retrieved_chunks, question, answer, k)
 
-        self._save_json_file("data/output/answer_result.json", answer_result)
+        self._save_json_file("data/output/answer_result.json", answer_res)
 
         Saving.save_text_file("data/output/answer.txt", answer)
 
@@ -1246,6 +1341,36 @@ class CLI:
             search_results_path
         )
 
+    def _load_rag_dataset(
+        self,
+        dataset_path: str,
+    ) -> RagDataset:
+        """
+        Loads a RAG dataset from a JSON file.
+        """
+        path = Path(dataset_path)
+
+        data = json.loads(
+            path.read_text(encoding="utf-8")
+        )
+
+        return RagDataset.model_validate(data)
+
+    def _load_search_results(
+        self,
+        answer_path: str,
+    ) -> SearchResults:
+        """
+        Loads search results from a JSON file.
+        """
+        path = Path(answer_path)
+
+        data = json.loads(
+            path.read_text(encoding="utf-8")
+        )
+
+        return SearchResults.model_validate(data)
+
     def evaluate(
         self,
         answer_path: str,
@@ -1253,11 +1378,42 @@ class CLI:
         k: int = 10,
         max_context_length: int = 2000,
     ) -> None:
+        """
+        Evaluates search results against an answered dataset.
+        """
         steps_logger.info(
-            "[CLI] Evaluating answers from: %s against dataset: %s",
+            "[CLI] Evaluating results from: %s against dataset: %s",
             answer_path,
-            dataset_path
+            dataset_path,
         )
+
+        expected_dataset = self._load_rag_dataset(dataset_path)
+
+        search_results = self._load_search_results(answer_path)
+
+        k_values = []
+        for value in [1, 3, 5, k]:
+            if value <= k:
+                k_values.append(value)
+
+        evaluator = RecallEvaluator()
+
+        scores = evaluator.evaluate(expected_dataset, search_results, k_values)
+
+        lines = [
+            "Evaluation Results",
+            "========================================",
+            f"Max context length: {max_context_length}",
+        ]
+
+        for k_value, score in scores.items():
+            lines.append(f"Recall@{k_value}: {score:.3f}")
+
+        result_text = "\n".join(lines)
+
+        print(result_text)
+
+        Saving.save_text_file("data/output/evaluation.txt", result_text)
 
 import fire
 import time

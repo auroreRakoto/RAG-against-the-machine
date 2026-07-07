@@ -20,7 +20,9 @@ run_answer_dataset:
 	uv run python3 main.py answer "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
 
 run_evaluate:
-	uv run python3 main.py evaluate "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
+# 	uv run python3 main.py evaluate "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
+	uv run python3 main.py evaluate --answer_path data/output/search_result.json --dataset_path data/datasets/AnsweredQuestions/dataset_docs_public.json --k=5
+
 
 debug:
 	uv run python3 -m pdb main.py
