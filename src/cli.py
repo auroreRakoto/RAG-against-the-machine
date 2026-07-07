@@ -85,7 +85,7 @@ class Saving:
         )
 
     @staticmethod
-    def log_info(msg:str, arg:str) -> None:
+    def log_info(msg: str, arg: str) -> None:
         steps_logger.info(
             msg,
             arg
@@ -396,15 +396,164 @@ class CLI:
 
         Saving.save_text_file("data/output/answer.txt", answer)
 
+    def _source_to_chunk(
+        self,
+        source: MinimalSource,
+    ) -> Chunk:
+        """
+        Rebuilds a Chunk from a MinimalSource by reading the source file.
+        """
+        path = Path(source.file_path)
+
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Source file not found: {source.file_path}"
+            )
+
+        text = path.read_text(
+            encoding="utf-8",
+            errors="ignore",
+        )
+
+        if source.first_character_index < 0:
+            raise ValueError(
+                "first_character_index cannot be negative"
+            )
+
+        if source.last_character_index > len(text):
+            raise ValueError(
+                f"last_character_index is outside file: {source.file_path}"
+            )
+
+        if source.last_character_index <= source.first_character_index:
+            raise ValueError(
+                "last_character_index must be greater than "
+                "first_character_index"
+            )
+
+        return Chunk(
+            text=text[
+                source.first_character_index:
+                source.last_character_index
+            ],
+            file_path=source.file_path,
+            first_character_index=source.first_character_index,
+            last_character_index=source.last_character_index,
+        )
+
+    def _sources_to_chunks(
+        self,
+        sources: list[MinimalSource],
+    ) -> list[Chunk]:
+        """
+        Rebuilds chunks from minimal source metadata.
+        """
+        chunks: list[Chunk] = []
+
+        for source in sources:
+            chunks.append(
+                self._source_to_chunk(source)
+            )
+
+        return chunks
+
+    def _answer_result_for_search_result(
+        self,
+        search_result: MinimalSearchResults,
+        answer: str,
+    ) -> MinimalAnswer:
+        """
+        Builds one answer result while preserving the question_id.
+        """
+        return MinimalAnswer(
+            question_id=search_result.question_id,
+            question=search_result.question,
+            retrieved_sources=search_result.retrieved_sources,
+            answer=answer,
+        )
+
     def answer_dataset(
         self,
         search_results_path: str,
         save_directory: str,
+        max_context_length: int = 8000,
     ) -> None:
+        """
+        Generates answers for all questions from saved search results.
+        """
         steps_logger.info(
             "[CLI] Answering dataset from: %s",
-            search_results_path
+            search_results_path,
         )
+
+        search_results = self._load_search_results(
+            answer_path=search_results_path,
+        )
+
+        prompt_builder = PromptBuilder()
+        language_model = QwenLanguageModel()
+
+        answered_results: list[MinimalAnswer] = []
+
+        total_questions = len(search_results.search_results)
+
+        print(f"Loaded {total_questions} questions from {search_results_path}")
+
+        for index, search_result in enumerate(
+            search_results.search_results,
+            start=1,
+        ):
+            retrieved_chunks = self._sources_to_chunks(
+                search_result.retrieved_sources
+            )
+
+            if not retrieved_chunks:
+                answer = (
+                    "The provided sources do not contain enough information."
+                )
+            else:
+                context = self._build_context(
+                    retrieved_chunks=retrieved_chunks,
+                    max_context_length=max_context_length,
+                )
+
+                prompt = prompt_builder.build(
+                    question=search_result.question,
+                    context=context,
+                )
+
+                answer = language_model.generate(prompt)
+
+            answered_results.append(
+                self._answer_result_for_search_result(
+                    search_result=search_result,
+                    answer=answer,
+                )
+            )
+
+            print(f"Processed {index} of {total_questions} questions")
+
+        result = SearchResultsWithAnswers(
+            search_results=answered_results,
+            k=search_results.k,
+        )
+
+        dataset_name = Path(search_results_path).name
+        output_path = str(
+            Path(save_directory) / dataset_name
+        )
+
+        self._save_json_file(
+            file_path=output_path,
+            content=result,
+        )
+
+        steps_logger.info(
+            "[CLI] Saved dataset answers to: %s",
+            output_path,
+        )
+
+        print(f"Saved answers to {output_path}")
 
     def _load_rag_dataset(
         self,
