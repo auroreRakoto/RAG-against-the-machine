@@ -533,12 +533,21 @@ class Retriever:
         """
         Retrieves the top-k most relevant chunks for a query.
         """
+        self.validate_query(
+            query=query,
+            k=k,
+        )
+
         steps_logger.info(
             "[Retriever] Retrieving top-%d chunks for query: %s",
             k,
             query,
         )
-        return self.search_index.search(query=query, k=k)
+
+        return self.search_index.search(
+            query=query,
+            k=k,
+        )
 
     def retrieve_sources(
         self,
@@ -548,7 +557,15 @@ class Retriever:
         """
         Retrieves the top-k results as minimal sources.
         """
-        pass
+        chunks = self.retrieve(
+            query=query,
+            k=k,
+        )
+
+        return [
+            self.chunk_to_source(chunk)
+            for chunk in chunks
+        ]
 
     def chunk_to_source(
         self,
@@ -557,7 +574,11 @@ class Retriever:
         """
         Converts a chunk into a minimal source.
         """
-        pass
+        return MinimalSource(
+            file_path=chunk.file_path,
+            first_character_index=chunk.first_character_index,
+            last_character_index=chunk.last_character_index,
+        )
 
     def validate_query(
         self,
@@ -567,8 +588,11 @@ class Retriever:
         """
         Validates the query and the number of requested results.
         """
-        pass
+        if not query.strip():
+            raise ValueError("Query cannot be empty")
 
+        if k <= 0:
+            raise ValueError("k must be greater than zero")
 
 # ////////////////////////////////////////////////////////////////// #
 # ////////////////////////// GENERATION //////////////////////////// #
@@ -940,6 +964,33 @@ class CLI:
             k=k,
         )
 
+    def _search_results(
+        self,
+        retrieved_chunks: list[Chunk],
+        query: str,
+        k: int
+    ) -> SearchResults:
+        retrieved_sources = [
+            MinimalSource(
+                file_path=chunk.file_path,
+                first_character_index=chunk.first_character_index,
+                last_character_index=chunk.last_character_index,
+            )
+            for chunk in retrieved_chunks
+        ]
+
+        search_result = SearchResults(
+            search_results=[
+                MinimalSearchResults(
+                    question_id="manual",
+                    question=query,
+                    retrieved_sources=retrieved_sources,
+                )
+            ],
+            k=k,
+        )
+        return search_result
+
     def _save_text_file(
         self,
         file_path: str,
@@ -999,6 +1050,31 @@ class CLI:
         steps_logger.info(
             "[CLI] Saved %d retrieved chunks to %s",
             len(retrieved_chunks),
+            path,
+        )
+
+    def _save_json_file(
+        self,
+        file_path: str,
+        content: BaseModel,
+    ) -> None:
+        """
+        Saves a pydantic model to a JSON file.
+        """
+        path = Path(file_path)
+
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        path.write_text(
+            content.model_dump_json(indent=4),
+            encoding="utf-8",
+        )
+
+        steps_logger.info(
+            "[CLI] Saved JSON file to: %s",
             path,
         )
 
@@ -1087,6 +1163,17 @@ class CLI:
         retrieved_chunks = self._retrieve_chunks(
             query=query,
             k=k,
+        )
+
+        search_result = self._search_results(
+            retrieved_chunks=retrieved_chunks,
+            query=query,
+            k=k
+        )
+
+        self._save_json_file(
+            file_path="data/output/search_result.json",
+            content=search_result,
         )
 
         context = self._build_context(
@@ -1197,6 +1284,7 @@ class CLI:
         )
 
 import fire
+import time
 
 def main():
     """
@@ -1205,4 +1293,7 @@ def main():
     fire.Fire(CLI, name="RAG CLI")
 
 if  __name__ == "__main__":
+    start = time.perf_counter()
     main()
+    end = time.perf_counter()
+    print(f"Elapsed: {end - start:.4f} seconds")
