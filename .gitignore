@@ -5,4 +5,3 @@ tmp/
 data/index
 data/logs
 data/output/
-data/output/BM25_indexes.txt
