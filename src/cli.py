@@ -23,6 +23,7 @@ from src.models import (
     UnansweredQuestion,
 )
 from src.retrieval import Retriever
+from tqdm import tqdm
 
 class Saving:
     @staticmethod
@@ -167,7 +168,10 @@ class CLI:
 
         all_chunks: list[Chunk] = []
 
-        for file_path, text in files.items():
+        for file_path, text in tqdm(
+            files.items(),
+            desc="Chunking files",
+        ):
             if file_path.endswith(".py"):
                 file_chunks = python_chunker.chunk(
                     text=text,
@@ -282,7 +286,10 @@ class CLI:
 
         search_results: list[MinimalSearchResults] = []
 
-        for question in dataset.rag_questions:
+        for question in tqdm(
+            dataset.rag_questions,
+            desc="Searching questions",
+        ):
             retrieved_chunks = self._retrieve_chunks(
                 query=question.question,
                 k=k,
@@ -477,6 +484,7 @@ class CLI:
         search_results_path: str,
         save_directory: str,
         max_context_length: int = 8000,
+        limit: int | None = None,
     ) -> None:
         """
         Generates answers for all questions from saved search results.
@@ -487,21 +495,26 @@ class CLI:
         )
 
         search_results = self._load_search_results(
-            answer_path=search_results_path,
+            answer_path=search_results_path
         )
+
+        results_to_answer = search_results.search_results
+
+        if limit is not None:
+            results_to_answer = results_to_answer[:limit]
 
         prompt_builder = PromptBuilder()
         language_model = QwenLanguageModel()
 
         answered_results: list[MinimalAnswer] = []
 
-        total_questions = len(search_results.search_results)
+        total_questions = len(results_to_answer)
 
         print(f"Loaded {total_questions} questions from {search_results_path}")
 
-        for index, search_result in enumerate(
-            search_results.search_results,
-            start=1,
+        for search_result in tqdm(
+            results_to_answer,
+            desc="Answering questions",
         ):
             retrieved_chunks = self._sources_to_chunks(
                 search_result.retrieved_sources
@@ -548,12 +561,10 @@ class CLI:
             content=result,
         )
 
-        steps_logger.info(
-            "[CLI] Saved dataset answers to: %s",
-            output_path,
+        Saving.log_info(
+            "[CLI] Saved dataset answers to: ",
+            output_path
         )
-
-        print(f"Saved answers to {output_path}")
 
     def _load_rag_dataset(
         self,
@@ -606,7 +617,10 @@ class CLI:
         search_results = self._load_search_results(answer_path)
 
         k_values = []
-        for value in [1, 3, 5, k]:
+        for value in tqdm(
+            [1, 3, 5, k], 
+            desc="Evaluating k-values"
+        ):
             if value <= k:
                 k_values.append(value)
 
