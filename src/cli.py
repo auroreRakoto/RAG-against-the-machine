@@ -25,6 +25,7 @@ from src.models import (
 from src.retrieval import Retriever
 from tqdm import tqdm
 
+
 class Saving:
     @staticmethod
     def save_text_file(file_path: str, content: str) -> None:
@@ -89,8 +90,9 @@ class Saving:
     def log_info(msg: str, arg: str) -> None:
         steps_logger.info(
             msg,
-            arg
+            arg,
         )
+
 
 class CLI:
     def _retrieve_chunks(
@@ -365,7 +367,10 @@ class CLI:
         """
         context_builder = ContextBuilder()
 
-        context = context_builder.build(retrieved_chunks, max_context_length)
+        context = context_builder.build(
+            retrieved_chunks,
+            max_context_length,
+        )
 
         return context
 
@@ -393,13 +398,24 @@ class CLI:
 
         language_model = QwenLanguageModel()
 
-        language_model.save_prompt_tokens(prompt, "data/output/qwen_tokens.txt")
+        language_model.save_prompt_tokens(
+            prompt,
+            "data/output/qwen_tokens.txt",
+        )
 
         answer = language_model.generate(prompt)
 
-        answer_res = self._answer_results(retrieved_chunks, question, answer, k)
+        answer_res = self._answer_results(
+            retrieved_chunks,
+            question,
+            answer,
+            k,
+        )
 
-        self._save_json_file("data/output/answer_result.json", answer_res)
+        self._save_json_file(
+            "data/output/answer_result.json",
+            answer_res,
+        )
 
         Saving.save_text_file("data/output/answer.txt", answer)
 
@@ -512,9 +528,12 @@ class CLI:
 
         print(f"Loaded {total_questions} questions from {search_results_path}")
 
-        for search_result in tqdm(
-            results_to_answer,
-            desc="Answering questions",
+        for index, search_result in enumerate(
+            tqdm(
+                results_to_answer,
+                desc="Answering questions",
+            ),
+            start=1,
         ):
             retrieved_chunks = self._sources_to_chunks(
                 search_result.retrieved_sources
@@ -544,7 +563,9 @@ class CLI:
                 )
             )
 
-            print(f"Processed {index} of {total_questions} questions")
+            print(
+                f"Processed {index} of {total_questions} questions"
+            )
 
         result = SearchResultsWithAnswers(
             search_results=answered_results,
@@ -561,9 +582,9 @@ class CLI:
             content=result,
         )
 
-        Saving.log_info(
-            "[CLI] Saved dataset answers to: ",
-            output_path
+        steps_logger.info(
+            "[CLI] Saved dataset answers to: %s",
+            output_path,
         )
 
     def _load_rag_dataset(
@@ -584,7 +605,7 @@ class CLI:
     def _load_search_results(
         self,
         answer_path: str,
-    ) -> SearchResults:
+    ) -> SearchResults[MinimalSearchResults]:
         """
         Loads search results from a JSON file.
         """
@@ -594,7 +615,7 @@ class CLI:
             path.read_text(encoding="utf-8")
         )
 
-        return SearchResults.model_validate(data)
+        return SearchResults[MinimalSearchResults].model_validate(data)
 
     def evaluate(
         self,
@@ -618,8 +639,8 @@ class CLI:
 
         k_values = []
         for value in tqdm(
-            [1, 3, 5, k], 
-            desc="Evaluating k-values"
+            [1, 3, 5, k],
+            desc="Evaluating k-values",
         ):
             if value <= k:
                 k_values.append(value)

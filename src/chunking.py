@@ -3,8 +3,9 @@
 # ////////////////////////////////////////////////////////////////// #
 from abc import ABC, abstractmethod
 
-from src.logging_config import chunks_loaded_logger, chunks_logger
+# from src.logging_config import chunks_loaded_logger, chunks_logger
 from src.models import Chunk
+
 
 class Chunker(ABC):
     def __init__(self, max_chunk_size: int = 2000) -> None:
@@ -36,22 +37,22 @@ class Chunker(ABC):
                 last_character_index=end,
             )
 
-            chunks_logger.info(
-                "File=%s | start=%d | end=%d\n%s\n",
-                file_path,
-                start,
-                end,
-                chunk.text,
-            )
+            # chunks_logger.info(
+            #    "File=%s | start=%d | end=%d\n%s\n",
+            #    file_path,
+            #    start,
+            #    end,
+            #    chunk.text,
+            # )
 
             chunks.append(chunk)
 
             start = end
-        chunks_loaded_logger.info(
-            "Created %d chunks for file: %s",
-            len(chunks),
-            file_path,
-        )
+        # chunks_loaded_logger.info(
+        #    "Created %d chunks for file: %s",
+        #    len(chunks),
+        #    file_path,
+        # )
         return chunks
 
     @abstractmethod
@@ -108,7 +109,4 @@ class TextChunker(Chunker):
 
         return split_index + 1
 
-
-class ChunkStorage:
-    pass
 

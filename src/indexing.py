@@ -222,4 +222,3 @@ class IndexStorage:
             parents=True,
             exist_ok=True,
         )
-

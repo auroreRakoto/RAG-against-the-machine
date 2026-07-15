@@ -12,7 +12,7 @@ run_search:
 
 run_search_dataset:
 # 	uv run python3 main.py search "data/raw/vllm-0.10.1" --k=10
-	uv run python3 main.py search_dataset \
+	uv run python3 -m src.main search_dataset \
     --dataset_path data/datasets/UnansweredQuestions/dataset_docs_public.json \
     --k=5 \
     --save_directory data/output/search_results
@@ -21,7 +21,10 @@ run_answer:
 	uv run python3 main.py answer "How to configure OpenAI server ?" --k=10
 
 run_answer_dataset:
-	uv run python3 main.py answer "data/output/search_results" "data/raw/vllm-0.10.1" --k=10
+	uv run python -m src.main answer_dataset \
+    --search_results_path data/output/search_results/dataset_docs_public.json \
+    --save_directory data/output/search_results_and_answer \
+    --limit 3
 
 run_evaluate:
 # 	uv run python3 main.py evaluate "data/output/search_results" "data/raw/vllm-0.10.1" --k=10

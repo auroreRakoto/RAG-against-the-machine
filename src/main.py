@@ -4,11 +4,13 @@ import fire
 
 from src.cli import CLI
 
-def main():
+
+def main() -> None:
     """
     Entry point for the CLI.
     """
     fire.Fire(CLI, name="RAG CLI")
+
 
 if __name__ == "__main__":
     start = time.perf_counter()

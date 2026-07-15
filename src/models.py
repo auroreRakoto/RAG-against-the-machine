@@ -2,7 +2,12 @@
 # ////////////////////////////////////////////////////////////////// #
 # ///////////////////////////// MODELS ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel
+
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class Chunk(BaseModel):
@@ -45,10 +50,10 @@ class MinimalAnswer(MinimalSearchResults):
     answer: str
 
 
-class SearchResults(BaseModel):
-    search_results: list[MinimalSearchResults]
+class SearchResults(BaseModel, Generic[T]):
+    search_results: list[T]
     k: int
 
 
-class SearchResultsWithAnswers(SearchResults):
-    search_results: list[MinimalAnswer]
+class SearchResultsWithAnswers(SearchResults[MinimalAnswer]):
+    pass
