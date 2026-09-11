@@ -18,8 +18,8 @@ from src.models import (
     MinimalSearchResults,
     MinimalSource,
     RagDataset,
-    SearchResults,
-    SearchResultsWithAnswers,
+    StudentSearchResults,
+    StudentSearchResultsAndAnswer,
     UnansweredQuestion,
 )
 from src.retrieval import Retriever
@@ -203,7 +203,7 @@ class CLI:
         retrieved_chunks: list[Chunk],
         query: str,
         k: int
-    ) -> SearchResults:
+    ) -> StudentSearchResults:
         retrieved_sources = [
             MinimalSource(
                 file_path=chunk.file_path,
@@ -213,7 +213,7 @@ class CLI:
             for chunk in retrieved_chunks
         ]
 
-        search_result = SearchResults(
+        search_result = StudentSearchResults(
             search_results=[
                 MinimalSearchResults(
                     question_id="manual",
@@ -304,7 +304,7 @@ class CLI:
                 )
             )
 
-        result = SearchResults(
+        result = StudentSearchResults(
             search_results=search_results,
             k=k,
         )
@@ -332,7 +332,7 @@ class CLI:
         question: str,
         answer: str,
         k: int,
-    ) -> SearchResultsWithAnswers:
+    ) -> StudentSearchResultsAndAnswer:
         """
         Builds structured answer results from retrieved chunks.
         """
@@ -345,7 +345,7 @@ class CLI:
             for chunk in retrieved_chunks
         ]
 
-        return SearchResultsWithAnswers(
+        return StudentSearchResultsAndAnswer(
             search_results=[
                 MinimalAnswer(
                     question_id="manual",
@@ -567,7 +567,7 @@ class CLI:
                 f"Processed {index} of {total_questions} questions"
             )
 
-        result = SearchResultsWithAnswers(
+        result = StudentSearchResultsAndAnswer(
             search_results=answered_results,
             k=search_results.k,
         )
@@ -605,7 +605,7 @@ class CLI:
     def _load_search_results(
         self,
         answer_path: str,
-    ) -> SearchResults[MinimalSearchResults]:
+    ) -> StudentSearchResults:
         """
         Loads search results from a JSON file.
         """
@@ -615,7 +615,7 @@ class CLI:
             path.read_text(encoding="utf-8")
         )
 
-        return SearchResults[MinimalSearchResults].model_validate(data)
+        return StudentSearchResults.model_validate(data)
 
     def evaluate(
         self,

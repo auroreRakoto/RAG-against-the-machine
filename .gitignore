@@ -1,7 +1,9 @@
-.venv
+.venv/
 __pycache__/
 *.pyc
 tmp/
-data/index
-data/logs
+.mypy_cache/
+.pytest_cache/
 data/output/
+data/index
+data/logs/

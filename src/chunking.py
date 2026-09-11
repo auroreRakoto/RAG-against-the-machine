@@ -108,5 +108,3 @@ class TextChunker(Chunker):
             return max_end
 
         return split_index + 1
-
-

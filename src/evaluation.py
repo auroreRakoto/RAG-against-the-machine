@@ -6,7 +6,7 @@ from src.models import (
     MinimalSearchResults,
     MinimalSource,
     RagDataset,
-    SearchResults,
+    StudentSearchResults,
 )
 
 
@@ -16,7 +16,7 @@ class RecallEvaluator:
     def evaluate(
         self,
         expected_dataset: RagDataset,
-        search_results: SearchResults,
+        search_results: StudentSearchResults,
         k_values: list[int],
     ) -> dict[int, float]:
         """
