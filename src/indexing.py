@@ -3,6 +3,7 @@
 # ////////////////////////////////////////////////////////////////// #
 from abc import ABC, abstractmethod
 from pathlib import Path
+import re
 import pickle
 
 from rank_bm25 import BM25Okapi
@@ -53,10 +54,12 @@ class BM25Index(SearchIndex):
 
         self.chunks = chunks
 
-        self.tokenized_chunks = [
-            self.tokenize(chunk.text)
-            for chunk in chunks
-        ]
+        self.tokenized_chunks = []
+
+        for chunk in chunks:
+            searchable_text = f"{chunk.file_path} {chunk.text}"
+            tokens = self.tokenize(searchable_text)
+            self.tokenized_chunks.append(tokens)
 
         output_path = Path("data/output/BM25_indexes.txt")
         output_path.parent.mkdir(
@@ -131,9 +134,19 @@ class BM25Index(SearchIndex):
 
     def tokenize(self, text: str) -> list[str]:
         """
-        Converts text into lowercase tokens used by BM25.
+        Converts text into normalized tokens used by BM25.
         """
-        return text.lower().split()
+        text = re.sub(
+            r"([a-z0-9])([A-Z])",
+            r"\1 \2",
+            text,
+        )
+        text = text.replace("_", " ")
+
+        return re.findall(
+            r"[a-zA-Z0-9]+",
+            text.lower(),
+        )
 
     def is_built(self) -> bool:
         """
