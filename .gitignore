@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 tmp/
 .mypy_cache/
+.tests
 .pytest_cache/
 data/output/
 data/index

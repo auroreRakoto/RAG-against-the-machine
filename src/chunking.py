@@ -3,12 +3,17 @@
 # ////////////////////////////////////////////////////////////////// #
 from abc import ABC, abstractmethod
 
-# from src.logging_config import chunks_loaded_logger, chunks_logger
 from src.models import Chunk
 
 
 class Chunker(ABC):
     def __init__(self, max_chunk_size: int = 2000) -> None:
+        if max_chunk_size <= 0:
+            raise ValueError("max_chunk_size must be greater than zero")
+
+        if max_chunk_size > 2000:
+            raise ValueError("max_chunk_size cannot be greater than 2000")
+
         self.max_chunk_size = max_chunk_size
 
     def chunk(
@@ -37,22 +42,9 @@ class Chunker(ABC):
                 last_character_index=end,
             )
 
-            # chunks_logger.info(
-            #    "File=%s | start=%d | end=%d\n%s\n",
-            #    file_path,
-            #    start,
-            #    end,
-            #    chunk.text,
-            # )
-
             chunks.append(chunk)
 
             start = end
-        # chunks_loaded_logger.info(
-        #    "Created %d chunks for file: %s",
-        #    len(chunks),
-        #    file_path,
-        # )
         return chunks
 
     @abstractmethod

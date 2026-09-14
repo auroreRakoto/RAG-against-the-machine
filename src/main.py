@@ -13,6 +13,7 @@ def main() -> None:
         fire.Fire(CLI, name="RAG CLI")
     except Exception as error:
         print(f"Error: {error}")
+        raise SystemExit(1)
 
     end = time.perf_counter()
     print(f"Elapsed: {end - start:.4f} seconds")

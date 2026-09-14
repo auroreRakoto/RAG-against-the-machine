@@ -11,7 +11,6 @@ from src.evaluation import RecallEvaluator
 from src.generation import ContextBuilder, PromptBuilder, QwenLanguageModel
 from src.indexing import BM25Index, IndexStorage
 from src.ingestion import FileReader, RepositoryLoader
-from src.logging_config import steps_logger
 from src.models import (
     Chunk,
     MinimalAnswer,
@@ -44,10 +43,10 @@ class Saving:
             encoding="utf-8",
         )
 
-        steps_logger.info(
-            "[CLI] Saved text file to: %s",
-            path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Saved text file to: %s",
+        #     path,
+        # )
 
     @staticmethod
     def save_retrieved_chunks(
@@ -80,36 +79,37 @@ class Saving:
                 file.write(chunk.text)
                 file.write("\n\n")
 
-        steps_logger.info(
-            "[CLI] Saved %d retrieved chunks to %s",
-            len(retrieved_chunks),
-            path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Saved %d retrieved chunks to %s",
+        #     len(retrieved_chunks),
+        #     path,
+        # )
 
-    @staticmethod
-    def log_info(msg: str, arg: str) -> None:
-        steps_logger.info(
-            msg,
-            arg,
-        )
+    # @staticmethod
+    # def log_info(msg: str, arg: str) -> None:
+    #     steps_logger.info(
+    #         msg,
+    #         arg,
+    #     )
 
 
 class CLI:
-    def _retrieve_chunks(
-        self,
-        query: str,
-        k: int,
-    ) -> list[Chunk]:
-        """
-        Loads the saved index and creates a retriever.
-        Retrieves chunks for a query using the saved index.
-        """
+    def _load_retriever(self) -> Retriever:
+        """Load the saved index once and create a retriever."""
         index_storage = IndexStorage()
         search_index = index_storage.load(
             directory_path="data/index"
         )
 
-        retriever = Retriever(search_index)
+        return Retriever(search_index)
+
+    def _retrieve_chunks(
+        self,
+        query: str,
+        k: int,
+    ) -> list[Chunk]:
+        """Retrieve chunks for a single query from the saved index."""
+        retriever = self._load_retriever()
 
         return retriever.retrieve(
             query=query,
@@ -136,30 +136,16 @@ class CLI:
             encoding="utf-8",
         )
 
-        steps_logger.info(
-            "[CLI] Saved JSON file to: %s",
-            path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Saved JSON file to: %s",
+        #     path,
+        # )
 
     def index(
         self,
         max_chunk_size: int = 2000,
         repository_path: str = "data/raw/vllm-0.10.1",
     ) -> None:
-        steps_logger.info(
-            "[CLI] Starting repository indexing: %s",
-            repository_path,
-        )
-
-        reader = FileReader()
-        loader = RepositoryLoader(file_reader=reader)
-
-        files = loader.load(repository_path)
-
-        steps_logger.info(
-            "[CLI] Repository loading completed"
-        )
-
         text_chunker = TextChunker(
             max_chunk_size=max_chunk_size
         )
@@ -167,6 +153,11 @@ class CLI:
         python_chunker = PythonChunker(
             max_chunk_size=max_chunk_size
         )
+
+        reader = FileReader()
+        loader = RepositoryLoader(file_reader=reader)
+
+        files = loader.load(repository_path)
 
         all_chunks: list[Chunk] = []
 
@@ -195,8 +186,6 @@ class CLI:
             search_index=search_index,
             directory_path="data/index",
         )
-
-        steps_logger.info(f"[CLI] Created {len(all_chunks)} chunks")
 
     def _search_results(
         self,
@@ -260,7 +249,7 @@ class CLI:
         """
         Searches the index and saves retrieved chunks and context.
         """
-        Saving.log_info("[CLI] Search requested: %s", query)
+        # Saving.log_info("[CLI] Search requested: %s", query)
         retrieved_chunks = self._retrieve_chunks(query, k)
         Saving.save_retrieved_chunks(retrieved_chunks)
 
@@ -276,23 +265,24 @@ class CLI:
         """
         Searches all questions from a dataset and saves structured results.
         """
-        steps_logger.info(
-            "[CLI] Searching dataset from: %s with top-%d results",
-            dataset_path,
-            k,
-        )
+        # steps_logger.info(
+        #     "[CLI] Searching dataset from: %s with top-%d results",
+        #     dataset_path,
+        #     k,
+        # )
 
         dataset = self._load_rag_dataset(
             dataset_path=dataset_path,
         )
 
         search_results: list[MinimalSearchResults] = []
+        retriever = self._load_retriever()
 
         for question in tqdm(
             dataset.rag_questions,
             desc="Searching questions",
         ):
-            retrieved_chunks = self._retrieve_chunks(
+            retrieved_chunks = retriever.retrieve(
                 query=question.question,
                 k=k,
             )
@@ -319,10 +309,10 @@ class CLI:
             content=result,
         )
 
-        steps_logger.info(
-            "[CLI] Saved dataset search results to: %s",
-            output_path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Saved dataset search results to: %s",
+        #     output_path,
+        # )
 
         print(f"Saved search results to {output_path}")
 
@@ -382,7 +372,7 @@ class CLI:
         """
         Answers a question using retrieved context and Qwen.
         """
-        Saving.log_info("[CLI] Answer requested: %s", question)
+        # Saving.log_info("[CLI] Answer requested: %s", question)
 
         retrieved_chunks = self._retrieve_chunks(question, k)
 
@@ -497,7 +487,7 @@ class CLI:
 
     def answer_dataset(
         self,
-        search_results_path: str,
+        student_search_results_path: str,
         save_directory: str,
         max_context_length: int = 8000,
         limit: int | None = None,
@@ -505,13 +495,13 @@ class CLI:
         """
         Generates answers for all questions from saved search results.
         """
-        steps_logger.info(
-            "[CLI] Answering dataset from: %s",
-            search_results_path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Answering dataset from: %s",
+        #     student_search_results_path,
+        # )
 
         search_results = self._load_search_results(
-            answer_path=search_results_path
+            answer_path=student_search_results_path
         )
 
         results_to_answer = search_results.search_results
@@ -526,7 +516,10 @@ class CLI:
 
         total_questions = len(results_to_answer)
 
-        print(f"Loaded {total_questions} questions from {search_results_path}")
+        print(
+            f"Loaded {total_questions} questions from "
+            f"{student_search_results_path}"
+        )
 
         for index, search_result in enumerate(
             tqdm(
@@ -572,7 +565,7 @@ class CLI:
             k=search_results.k,
         )
 
-        dataset_name = Path(search_results_path).name
+        dataset_name = Path(student_search_results_path).name
         output_path = str(
             Path(save_directory) / dataset_name
         )
@@ -582,10 +575,10 @@ class CLI:
             content=result,
         )
 
-        steps_logger.info(
-            "[CLI] Saved dataset answers to: %s",
-            output_path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Saved dataset answers to: %s",
+        #     output_path,
+        # )
 
     def _load_rag_dataset(
         self,
@@ -627,11 +620,11 @@ class CLI:
         """
         Evaluates search results against an answered dataset.
         """
-        steps_logger.info(
-            "[CLI] Evaluating results from: %s against dataset: %s",
-            answer_path,
-            dataset_path,
-        )
+        # steps_logger.info(
+        #     "[CLI] Evaluating results from: %s against dataset: %s",
+        #     answer_path,
+        #     dataset_path,
+        # )
 
         expected_dataset = self._load_rag_dataset(dataset_path)
 

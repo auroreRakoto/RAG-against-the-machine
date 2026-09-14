@@ -5,8 +5,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, cast
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 # from src.logging_config import steps_logger
 from src.models import Chunk
 
@@ -118,6 +116,8 @@ class QwenLanguageModel(LanguageModel):
         self,
         model_name: str = "Qwen/Qwen3-0.6B",
     ) -> None:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
         self.model_name = model_name
 
         # steps_logger.info(
