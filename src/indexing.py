@@ -8,7 +8,6 @@ import pickle
 
 from rank_bm25 import BM25Okapi
 
-from src.logging_config import steps_logger
 from src.models import Chunk
 
 
@@ -48,10 +47,6 @@ class BM25Index(SearchIndex):
         if not chunks:
             raise ValueError("Cannot build an index without chunks")
 
-        steps_logger.info(
-            "[BM25Index] Starting BM25 index construction"
-        )
-
         self.chunks = chunks
 
         self.tokenized_chunks = []
@@ -80,10 +75,6 @@ class BM25Index(SearchIndex):
 
         self.bm25 = BM25Okapi(self.tokenized_chunks)
 
-        steps_logger.info(
-            "[BM25Index] BM25 index construction completed"
-        )
-
     def search(
         self,
         query: str,
@@ -106,12 +97,6 @@ class BM25Index(SearchIndex):
         if not isinstance(self.bm25, BM25Okapi):
             raise RuntimeError("Invalid BM25 index")
 
-        steps_logger.info(
-            "[BM25Index] Searching query=%r with k=%d",
-            query,
-            k,
-        )
-
         scores = self.bm25.get_scores(query_tokens)
 
         ranked_indices = sorted(
@@ -121,11 +106,6 @@ class BM25Index(SearchIndex):
         )
 
         selected_indices = ranked_indices[:min(k, len(ranked_indices))]
-
-        steps_logger.info(
-            "[BM25Index] Retrieved %d chunks",
-            len(selected_indices),
-        )
 
         return [
             self.chunks[index]
@@ -176,11 +156,6 @@ class IndexStorage:
         with file_path.open("wb") as file:
             pickle.dump(search_index, file)
 
-        steps_logger.info(
-            "[IndexStorage] Index saved to: %s",
-            file_path,
-        )
-
     def load(
         self,
         directory_path: str,
@@ -205,11 +180,6 @@ class IndexStorage:
             raise TypeError(
                 "Loaded object is not a SearchIndex"
             )
-
-        steps_logger.info(
-            "[IndexStorage] Index loaded from: %s",
-            file_path,
-        )
 
         return search_index
 

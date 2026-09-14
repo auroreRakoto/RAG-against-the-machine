@@ -2,18 +2,12 @@
 # ////////////////////////// RETRIEVAL ///////////////////////////// #
 # ////////////////////////////////////////////////////////////////// #
 from src.indexing import SearchIndex
-from src.logging_config import steps_logger
 from src.models import Chunk, MinimalSource
 
 
 class Retriever:
     def __init__(self, search_index: SearchIndex) -> None:
         self.search_index = search_index
-
-        steps_logger.info(
-            "[Retriever] Initialized with search index: %s",
-            type(search_index).__name__,
-        )
 
     def retrieve(
         self,
@@ -26,12 +20,6 @@ class Retriever:
         self.validate_query(
             query=query,
             k=k,
-        )
-
-        steps_logger.info(
-            "[Retriever] Retrieving top-%d chunks for query: %s",
-            k,
-            query,
         )
 
         return self.search_index.search(

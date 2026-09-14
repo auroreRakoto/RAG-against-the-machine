@@ -43,11 +43,6 @@ class Saving:
             encoding="utf-8",
         )
 
-        # steps_logger.info(
-        #     "[CLI] Saved text file to: %s",
-        #     path,
-        # )
-
     @staticmethod
     def save_retrieved_chunks(
         retrieved_chunks: list[Chunk],
@@ -78,19 +73,6 @@ class Saving:
                 )
                 file.write(chunk.text)
                 file.write("\n\n")
-
-        # steps_logger.info(
-        #     "[CLI] Saved %d retrieved chunks to %s",
-        #     len(retrieved_chunks),
-        #     path,
-        # )
-
-    # @staticmethod
-    # def log_info(msg: str, arg: str) -> None:
-    #     steps_logger.info(
-    #         msg,
-    #         arg,
-    #     )
 
 
 class CLI:
@@ -135,11 +117,6 @@ class CLI:
             content.model_dump_json(indent=4),
             encoding="utf-8",
         )
-
-        # steps_logger.info(
-        #     "[CLI] Saved JSON file to: %s",
-        #     path,
-        # )
 
     def index(
         self,
@@ -265,12 +242,6 @@ class CLI:
         """
         Searches all questions from a dataset and saves structured results.
         """
-        # steps_logger.info(
-        #     "[CLI] Searching dataset from: %s with top-%d results",
-        #     dataset_path,
-        #     k,
-        # )
-
         dataset = self._load_rag_dataset(
             dataset_path=dataset_path,
         )
@@ -308,11 +279,6 @@ class CLI:
             file_path=output_path,
             content=result,
         )
-
-        # steps_logger.info(
-        #     "[CLI] Saved dataset search results to: %s",
-        #     output_path,
-        # )
 
         print(f"Saved search results to {output_path}")
 
@@ -495,10 +461,6 @@ class CLI:
         """
         Generates answers for all questions from saved search results.
         """
-        # steps_logger.info(
-        #     "[CLI] Answering dataset from: %s",
-        #     student_search_results_path,
-        # )
 
         search_results = self._load_search_results(
             answer_path=student_search_results_path
@@ -575,11 +537,6 @@ class CLI:
             content=result,
         )
 
-        # steps_logger.info(
-        #     "[CLI] Saved dataset answers to: %s",
-        #     output_path,
-        # )
-
     def _load_rag_dataset(
         self,
         dataset_path: str,
@@ -620,11 +577,6 @@ class CLI:
         """
         Evaluates search results against an answered dataset.
         """
-        # steps_logger.info(
-        #     "[CLI] Evaluating results from: %s against dataset: %s",
-        #     answer_path,
-        #     dataset_path,
-        # )
 
         expected_dataset = self._load_rag_dataset(dataset_path)
 

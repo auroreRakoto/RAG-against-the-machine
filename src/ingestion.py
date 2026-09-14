@@ -3,8 +3,6 @@
 # ////////////////////////////////////////////////////////////////// #
 from pathlib import Path
 
-from src.logging_config import files_logger, steps_logger
-
 
 class FileReader:
     def read(self, file_path: str) -> str:
@@ -51,15 +49,5 @@ class RepositoryLoader:
                 files[str(file_path)] = self.file_reader.read(
                     str(file_path)
                 )
-
-                files_logger.info(
-                    "Read file: %s",
-                    file_path,
-                )
-
-        steps_logger.info(
-            "[RepositoryLoader] Loaded %d files",
-            len(files)
-        )
 
         return files

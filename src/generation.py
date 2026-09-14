@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, cast
 
-# from src.logging_config import steps_logger
 from src.models import Chunk
 
 
@@ -26,10 +25,7 @@ class ContextBuilder:
         context_parts: list[str] = []
         current_length = 0
 
-        # steps_logger.info(
-        #     "[ContextBuilder] Building context from %d chunks",
-        #     len(chunks),
-        # )
+
 
         for index, chunk in enumerate(chunks):
             chunk_context = (
@@ -57,11 +53,6 @@ class ContextBuilder:
             current_length += len(chunk_context)
 
         context = "".join(context_parts)
-
-        # steps_logger.info(
-        #     "[ContextBuilder] Context created with %d characters",
-        #     len(context),
-        # )
 
         return context
 
@@ -97,11 +88,6 @@ class PromptBuilder:
             "FINAL ANSWER:\n"
         )
 
-        # steps_logger.info(
-        #     "[PromptBuilder] Prompt created with %d characters",
-        #     len(prompt),
-        # )
-
         return prompt
 
 
@@ -120,11 +106,6 @@ class QwenLanguageModel(LanguageModel):
 
         self.model_name = model_name
 
-        # steps_logger.info(
-        #     "[QwenLanguageModel] Loading tokenizer: %s",
-        #     model_name,
-        # )
-
         self.tokenizer = cast(
             Any,
             AutoTokenizer.from_pretrained(
@@ -132,21 +113,12 @@ class QwenLanguageModel(LanguageModel):
             ),
         )
 
-        # steps_logger.info("[QwenLanguageModel] Tokenizer loaded")
-
-        # steps_logger.info(
-        #     "[QwenLanguageModel] Loading model: %s",
-        #     model_name,
-        # )
-
         self.model = cast(
             Any,
             AutoModelForCausalLM.from_pretrained(
                 model_name,
             ),
         )
-
-        # steps_logger.info("[QwenLanguageModel] Model loaded")
 
     def tokenize_prompt(
         self,
@@ -165,11 +137,6 @@ class QwenLanguageModel(LanguageModel):
                 add_special_tokens=True,
             ),
         )
-
-        # steps_logger.info(
-        #     "[QwenLanguageModel] Prompt tokenized into %d tokens",
-        #     len(token_ids),
-        # )
 
         return token_ids
 
@@ -211,11 +178,6 @@ class QwenLanguageModel(LanguageModel):
                 file.write(
                     f"{index}: {token_ids[index]} -> {token!s}\n"
                 )
-
-        # steps_logger.info(
-        #     "[QwenLanguageModel] Qwen tokens saved to: %s",
-        #     path,
-        # )
 
     def generate(
         self,
@@ -271,11 +233,6 @@ class QwenLanguageModel(LanguageModel):
                 answer = answer.split(marker, 1)[0].strip()
 
         answer = answer.strip("`").strip()
-
-        # steps_logger.info(
-        #     "[QwenLanguageModel] Generated answer with %d characters",
-        #     len(answer),
-        # )
 
         return answer.strip()
 
